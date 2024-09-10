@@ -29,7 +29,6 @@ services:
       # Application
       - HOST=0.0.0.0
       - PORT=8081
-      - WEB_CONCURRENCY=10
       - POSTGRES_USER=username
       - POSTGRES_PASS=password
       - POSTGRES_DBNAME=postgis
@@ -50,7 +49,7 @@ services:
         required: false
     depends_on:
       - database
-    command: bash -c "bash /tmp/scripts/wait-for-it.sh -t 120 -h database -p 5432 && /start.sh"
+    command: bash -c "/tmp/scripts/wait-for-it.sh -t 120 -h database -p 5432 && eo-catalog-stac"
     develop:
       watch:
         - action: sync+restart
@@ -154,7 +153,12 @@ services:
       - ./dockerfiles/scripts:/tmp/scripts
 
   database:
-    image: ghcr.io/stac-utils/pgstac:v0.8.5
+    container_name: stac-db
+    image: pgstac
+    build:
+      context: ./third_party/pgstac
+      dockerfile: docker/pgstac/Dockerfile
+      target: pgstac
     environment:
       - POSTGRES_USER=username
       - POSTGRES_PASSWORD=password

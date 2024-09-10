@@ -1,3 +1,25 @@
+# -*- coding: utf-8 -*-
+# MIT License
+
+# Copyright (c) 2024 Development Seed
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 """TiTiler extension."""
 
 from typing import Optional
@@ -34,18 +56,10 @@ class TiTilerExtension(ApiExtension):
             request: Request,
             collection_id: str = Path(description="Collection ID"),
             item_id: str = Path(description="Item ID"),
-            tile_format: Optional[str] = Query(
-                None, description="Output image type. Default is auto."
-            ),
-            tile_scale: int = Query(
-                1, gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
-            ),
-            minzoom: Optional[int] = Query(
-                None, description="Overwrite default minzoom."
-            ),
-            maxzoom: Optional[int] = Query(
-                None, description="Overwrite default maxzoom."
-            ),
+            tile_format: Optional[str] = Query(None, description="Output image type. Default is auto."),
+            tile_scale: int = Query(1, gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."),
+            minzoom: Optional[int] = Query(None, description="Overwrite default minzoom."),
+            maxzoom: Optional[int] = Query(None, description="Overwrite default maxzoom."),
             assets: Optional[str] = Query(  # noqa
                 None,
                 description="comma (',') delimited asset names.",
@@ -72,11 +86,7 @@ class TiTilerExtension(ApiExtension):
                 "minzoom",
                 "maxzoom",
             ]
-            qs = [
-                (key, value)
-                for (key, value) in request.query_params._list
-                if key.lower() not in qs_key_to_remove
-            ]
+            qs = [(key, value) for (key, value) in request.query_params._list if key.lower() not in qs_key_to_remove]
             return RedirectResponse(
                 f"{self.titiler_endpoint}/collections/{collection_id}/items/{item_id}/tilejson.json?{urlencode(qs)}"
             )

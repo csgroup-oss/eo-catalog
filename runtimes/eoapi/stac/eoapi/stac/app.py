@@ -1,33 +1,60 @@
+# -*- coding: utf-8 -*-
+# MIT License
+
+# Copyright 2024, CS GROUP - France, https://www.csgroup.eu/
+# Copyright (c) 2024 Development Seed
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE
 """eoapi.stac app."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from typing import List
 
-from eoapi.auth_utils import OpenIdConnectAuth, OpenIdConnectSettings
 from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
 from stac_fastapi.api.app import StacApi
+from stac_fastapi.api.middleware import ProxyHeaderMiddleware
 from stac_fastapi.api.models import (
+    EmptyRequest,
     ItemCollectionUri,
     create_get_request_model,
     create_post_request_model,
     create_request_model,
 )
 from stac_fastapi.extensions.core import (
+    CollectionSearchExtension,
     FieldsExtension,
     FilterExtension,
+    FreeTextAdvancedExtension,
+    FreeTextExtension,
     SortExtension,
     TokenPaginationExtension,
     TransactionExtension,
 )
 from stac_fastapi.extensions.third_party import BulkTransactionExtension
-from stac_fastapi.pgstac.config import Settings
-from stac_fastapi.pgstac.core import CoreCrudClient
 from stac_fastapi.pgstac.db import close_db_connection, connect_to_db
 from stac_fastapi.pgstac.extensions import QueryExtension
-from stac_fastapi.pgstac.extensions.filter import FiltersClient
 from stac_fastapi.pgstac.transactions import BulkTransactionsClient, TransactionsClient
 from stac_fastapi.pgstac.types.search import PgstacSearch
+from stac_fastapi.types.extension import ApiExtension
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -35,9 +62,14 @@ from starlette.responses import HTMLResponse
 from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
-from .config import ApiSettings
-from .extension import TiTilerExtension
-from .logs import init_logging
+from eoapi.auth_utils import OpenIdConnectAuth, OpenIdConnectSettings
+from eoapi.stac.config import Settings
+from eoapi.stac.core import EOCClient
+from eoapi.stac.extensions.collection_search import CollectionSearchGetRequest
+from eoapi.stac.extensions.filter import FiltersClient
+from eoapi.stac.extensions.titiller import TiTilerExtension
+from eoapi.stac.logs import init_logging
+from eoapi.stac.middlewares.timeout import add_timeout
 
 try:
     from importlib.resources import files as resources_files  # type: ignore
@@ -48,12 +80,11 @@ except ImportError:
 
 templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))  # type: ignore
 
-api_settings = ApiSettings()
 auth_settings = OpenIdConnectSettings()
 settings = Settings(enable_response_models=True)
 
 # Logs
-init_logging(debug=api_settings.debug)
+init_logging(service_name=settings.otel_service_name, debug=settings.debug)
 logger = logging.getLogger(__name__)
 
 # Extensions
@@ -69,21 +100,21 @@ extensions_map = {
     "pagination": TokenPaginationExtension(),
     "filter": FilterExtension(client=FiltersClient()),
     "bulk_transactions": BulkTransactionExtension(client=BulkTransactionsClient()),
-    "titiler": (
-        TiTilerExtension(titiler_endpoint=api_settings.titiler_endpoint)
-        if api_settings.titiler_endpoint
-        else None
-    ),
+    "titiler": (TiTilerExtension(titiler_endpoint=settings.titiler_endpoint) if settings.titiler_endpoint else None),
+    "freetext_advanced": FreeTextAdvancedExtension(),
 }
 
-if enabled_extensions := api_settings.extensions:
-    extensions = [
-        extensions_map.get(name)
-        for name in enabled_extensions
-        if name in extensions_map
-    ]
+if enabled_extensions := settings.stac_extensions:
+    extensions = [extensions_map[name] for name in enabled_extensions if extensions_map.get(name)]
 else:
-    extensions = list(extensions_map.values())
+    extensions = [k[v] for k, v in extensions_map.items() if v]
+
+if not (enabled_extensions := settings.stac_extensions) or "collection_search" in enabled_extensions:
+    extension = CollectionSearchExtension.from_extensions(extensions)
+    extensions.append(extension)
+    collections_get_request_model = extension.GET
+else:
+    collections_get_request_model = EmptyRequest
 
 
 @asynccontextmanager
@@ -93,6 +124,11 @@ async def lifespan(app: FastAPI):
     await connect_to_db(app)
     logger.debug("Connected to db.")
 
+    if settings.redis_enabled:
+        from eoapi.stac.redis import connect_to_redis
+
+        await connect_to_redis(app)
+
     yield
 
     logger.debug("Closing db connections...")
@@ -101,17 +137,22 @@ async def lifespan(app: FastAPI):
 
 
 # Middlewares
-middlewares = [Middleware(CompressionMiddleware)]
-if api_settings.cors_origins:
+middlewares = [Middleware(CompressionMiddleware), Middleware(ProxyHeaderMiddleware)]
+if settings.cors_origins:
     middlewares.append(
         Middleware(
             CORSMiddleware,
-            allow_origins=api_settings.cors_origins,
+            allow_origins=settings.cors_origins,
             allow_credentials=True,
-            allow_methods=api_settings.cors_methods,
+            allow_methods=settings.cors_methods,
             allow_headers=["*"],
         )
     )
+if settings.otel_enabled:
+    from eoapi.stac.middlewares.tracing import TraceMiddleware
+
+    middlewares.append(Middleware(TraceMiddleware, service_name=settings.otel_service_name))
+
 
 # Custom Models
 items_get_model = ItemCollectionUri
@@ -123,33 +164,35 @@ if any(isinstance(ext, TokenPaginationExtension) for ext in extensions):
         request_type="GET",
     )
 
-search_get_model = create_get_request_model(extensions)
-search_post_model = create_post_request_model(extensions, base_model=PgstacSearch)
+itemsearch_exts = [ext for ext in extensions if ext.__class__.__name__ != "CollectionSearchExtension"]
+search_get_model = create_get_request_model(itemsearch_exts)
+search_post_model = create_post_request_model(itemsearch_exts, base_model=PgstacSearch)
 
 api = StacApi(
     app=FastAPI(
-        title=api_settings.name,
         lifespan=lifespan,
-        openapi_url="/api",
-        docs_url="/api.html",
+        openapi_url=settings.openapi_url,
+        docs_url=settings.docs_url,
         redoc_url=None,
         swagger_ui_init_oauth={
             "clientId": auth_settings.client_id,
             "usePkceWithAuthorizationCodeGrant": auth_settings.use_pkce,
         },
+        root_path=settings.app_root_path,
     ),
-    title=api_settings.name,
-    description=api_settings.name,
     settings=settings,
     extensions=extensions,
-    client=CoreCrudClient(post_request_model=search_post_model),
+    client=EOCClient(post_request_model=search_post_model),
     items_get_request_model=items_get_model,
     search_get_request_model=search_get_model,
     search_post_request_model=search_post_model,
+    collections_get_request_model=collections_get_request_model,
     response_class=ORJSONResponse,
     middlewares=middlewares,
 )
 app = api.app
+
+add_timeout(app, settings.request_timeout)
 
 
 @app.get("/index.html", response_class=HTMLResponse)
@@ -170,8 +213,26 @@ if auth_settings.openid_configuration_url:
 
     restricted_prefixes = ["/collections", "/search"]
     for route in app.routes:
-        if any(
-            route.path.startswith(f"{app.root_path}{prefix}")
-            for prefix in restricted_prefixes
-        ):
+        if any(route.path.startswith(f"{app.root_path}{prefix}") for prefix in restricted_prefixes):
             oidc_auth.apply_auth_dependencies(route, required_token_scopes=[])
+
+
+def run() -> None:
+    """Run app from command line using uvicorn if available."""
+    try:
+        import uvicorn
+
+        uvicorn.run(
+            "eoapi.stac.app:app",
+            host=settings.app_host,
+            port=settings.app_port,
+            log_level="info",
+            reload=settings.reload,
+            root_path=os.getenv("UVICORN_ROOT_PATH", ""),
+        )
+    except ImportError as e:
+        raise RuntimeError("Uvicorn must be installed in order to use command") from e
+
+
+if __name__ == "__main__":
+    run()

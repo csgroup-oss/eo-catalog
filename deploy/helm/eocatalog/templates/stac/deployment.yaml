@@ -1,0 +1,304 @@
+{{- if .Values.stac.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "eocatalogue.stac" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" . | nindent 4 }}
+    app.kubernetes.io/component: stac-api
+    {{- if .Values.commonLabels }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.commonLabels "context" $) | nindent 4 }}
+    {{- end }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" (dict "value" .Values.commonAnnotations "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.stac.replicaCount }}
+  {{- if .Values.stac.updateStrategy }}
+  strategy: {{- toYaml .Values.stac.updateStrategy | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" . | nindent 6 }}
+      app.kubernetes.io/component: stac-api
+  template:
+    metadata:
+      labels: {{- include "common.labels.standard" . | nindent 8 }}
+        app.kubernetes.io/component: stac-api
+        {{- if .Values.stac.podLabels }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.stac.podLabels "context" $) | nindent 8 }}
+        {{- end }}
+      {{- if .Values.stac.podAnnotations }}
+      annotations: {{- include "common.tplvalues.render" (dict "value" .Values.stac.podAnnotations "context" $) | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "eocatalogue.stac.serviceAccountName" . }}
+      {{- include "eocatalogue.imagePullSecrets" . | nindent 6 }}
+      {{- if .Values.stac.hostAliases }}
+      hostAliases: {{- include "common.tplvalues.render" (dict "value" .Values.stac.hostAliases "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.stac.affinity }}
+      affinity: {{- include "common.tplvalues.render" (dict "value" .Values.stac.affinity "context" $) | nindent 8 }}
+      {{- else if or .Values.stac.podAffinityPreset .Values.stac.podAntiAffinityPreset .Values.stac.nodeAffinityPreset }}
+      affinity:
+        podAffinity: {{- include "common.affinities.pods" (dict "type" .Values.stac.podAffinityPreset "instance" .Chart.Name "context" $) | nindent 10 }}
+        podAntiAffinity: {{- include "common.affinities.pods" (dict "type" .Values.stac.podAntiAffinityPreset "instance" .Chart.Name "context" $) | nindent 10 }}
+        nodeAffinity: {{- include "common.affinities.nodes" (dict "type" .Values.stac.nodeAffinityPreset.type "key" .Values.stac.nodeAffinityPreset.key "values" .Values.stac.nodeAffinityPreset.values) | nindent 10 }}
+      {{- end }}
+      {{- if .Values.stac.nodeSelector }}
+      nodeSelector: {{- include "common.tplvalues.render" (dict "value" .Values.stac.nodeSelector "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.stac.tolerations }}
+      tolerations: {{- include "common.tplvalues.render" (dict "value" .Values.stac.tolerations "context" .) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.stac.schedulerName }}
+      schedulerName: {{ .Values.stac.schedulerName }}
+      {{- end }}
+      {{- if .Values.stac.shareProcessNamespace }}
+      shareProcessNamespace: {{ .Values.stac.shareProcessNamespace }}
+      {{- end }}
+      {{- if .Values.stac.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- include "common.tplvalues.render" (dict "value" .Values.stac.topologySpreadConstraints "context" .) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.stac.priorityClassName }}
+      priorityClassName: {{ .Values.stac.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.stac.runtimeClassName }}
+      runtimeClassName: {{ .Values.stac.runtimeClassName }}
+      {{- end }}
+      {{- if .Values.stac.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.stac.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      initContainers:
+      {{- if .Values.stac.initContainers }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.stac.initContainers "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.stac.redisWait.enabled }}
+        - name: wait-for-redis
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.redis.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy | quote }}
+          {{- with .Values.stac.redisWait.securityContext }}
+          securityContext: {{ . | toYaml }}
+          {{- end }}
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+                #!/bin/bash
+                set -o errexit
+                set -o nounset
+                set -o pipefail
+                . /opt/bitnami/scripts/libos.sh
+                . /opt/bitnami/scripts/liblog.sh
+                check_redis_connection() {
+                  local result="$(redis-cli -h {{ include "eocatalogue.redisHost" . }} -p {{ include "eocatalogue.redisPort" . }} {{ .Values.stac.redisWait.extraArgs }} PING)"
+                  if [[ "$result" != "PONG" ]]; then
+                    false
+                  fi
+                }
+                info "Checking redis connection..."
+                if ! retry_while "check_redis_connection"; then
+                    error "Could not connect to the Redis server"
+                    return 1
+                else
+                    info "Connected to the Redis instance"
+                fi
+          {{- if include "eocatalogue.redis.auth.enabled" . }}
+          env:
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eocatalogue.redis.secretName" . }}
+                  key: {{ include "eocatalogue.redis.secretPasswordKey" . }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.stac.initDb }}
+        - name: init-db
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.stac.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.stac.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -xe
+              pypgstac pgready && pypgstac migrate
+          env:
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eocatalogue.databaseSecretName" . }}
+                  key: {{ include "eocatalogue.databaseSecretPostgresKey" . }}
+            - name: PGDATABASE
+              value: {{ include "eocatalogue.databaseName" . }}
+            - name: PGPORT
+              value: {{ include "eocatalogue.databasePort" . }}
+            - name: PGHOST
+              value: {{ include "eocatalogue.databaseHost" . }}
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eocatalogue.databaseSecretName" . }}
+                  key: {{ include "eocatalogue.databaseSecretPostgresKey" . }}
+            - name: POSTGRES_HOST_READER
+              value: {{ include "eocatalogue.databaseHost" . }}
+            - name: POSTGRES_HOST_WRITER
+              value: {{ include "eocatalogue.databaseHost" . }}
+            - name: POSTGRES_PORT
+              value: {{ include "eocatalogue.databasePort" . }}
+            - name: POSTGRES_DBNAME
+              value: {{ include "eocatalogue.databaseName" . }}
+        {{- end }}
+      containers:
+        - name: stac-api
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.stac.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.stac.image.pullPolicy }}
+          {{- if .Values.stac.lifecycleHooks }}
+          lifecycle: {{- include "common.tplvalues.render" (dict "value" .Values.stac.lifecycleHooks "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.stac.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.stac.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.stac.command }}
+          command: {{- include "common.tplvalues.render" (dict "value" .Values.stac.command "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.stac.args }}
+          args: {{- include "common.tplvalues.render" (dict "value" .Values.stac.args "context" $) | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.stac.containerPorts.http }}
+              protocol: TCP
+          {{- if .Values.stac.customStartupProbe }}
+          startupProbe: {{- include "common.tplvalues.render" (dict "value" .Values.stac.customStartupProbe "context" $) | nindent 12 }}
+          {{- else if .Values.stac.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.stac.containerPorts.http }}
+            initialDelaySeconds: {{ .Values.stac.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.stac.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.stac.startupProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.stac.startupProbe.successThreshold }}
+            failureThreshold: {{ .Values.stac.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.stac.customLivenessProbe }}
+          livenessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.stac.customLivenessProbe "context" $) | nindent 12 }}
+          {{- else if .Values.stac.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.stac.containerPorts.http }}
+            initialDelaySeconds: {{ .Values.stac.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.stac.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.stac.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.stac.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.stac.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.stac.customReadinessProbe }}
+          readinessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.stac.customReadinessProbe "context" $) | nindent 12 }}
+          {{- else if .Values.stac.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.stac.containerPorts.http }}
+            initialDelaySeconds: {{ .Values.stac.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.stac.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.stac.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.stac.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.stac.readinessProbe.failureThreshold }}
+          {{- end }}
+          env:
+            - name: APP_ROOT_PATH
+              value: {{ .Values.stac.appRootPath }}
+            - name: APP_HOST
+              value: {{ .Values.stac.host | quote }}
+            - name: APP_PORT
+              value: {{ .Values.stac.containerPorts.http | quote }}
+            - name: STAC_FASTAPI_LANDING_ID
+              value: {{ .Values.stac.api.landingPageId }}
+            - name: STAC_FASTAPI_TITLE
+              value: {{ .Values.stac.api.title }}
+            - name: STAC_FASTAPI_DESCRIPTION
+              value: {{ .Values.stac.api.description }}
+            - name: USE_API_HYDRATE
+              value: {{ .Values.stac.useApiHydrate | quote }}
+            - name: DEBUG
+              value: {{ .Values.stac.debug | quote }}
+            - name: REQUEST_TIMEOUT
+              value: {{ .Values.stac.requestTimeout | quote }}
+            - name: POSTGRES_USER
+              value: {{ include "eocatalogue.databaseUser" . }}
+            - name: POSTGRES_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eocatalogue.databaseSecretName" . }}
+                  key: {{ include "eocatalogue.databaseSecretKey" . }}
+            - name: POSTGRES_HOST_READER
+              value: {{ include "eocatalogue.databaseHost" . }}
+            - name: POSTGRES_HOST_WRITER
+              value: {{ include "eocatalogue.databaseHostWriter" . }}
+            - name: POSTGRES_PORT
+              value: {{ include "eocatalogue.databasePort" . }}
+            - name: POSTGRES_DBNAME
+              value: {{ include "eocatalogue.databaseName" . }}
+            - name: DB_MIN_CONN_SIZE
+              value: {{ .Values.stac.dbConnectionSize.min | quote }}
+            - name: DB_MAX_CONN_SIZE
+              value: {{ .Values.stac.dbConnectionSize.max | quote }}
+            - name: ENVIRONMENT
+              value: {{ .Values.stac.environment }}
+            - name: REDIS_CLUSTER
+              value: {{ .Values.stac.redisCluster | quote }}
+            - name: REDIS_HOSTNAME
+              value: {{ include "eocatalogue.redisHost" . }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eocatalogue.redis.secretName" . }}
+                  key: {{ include "eocatalogue.redis.secretPasswordKey" . }}
+            - name: REDIS_PORT
+              value: {{ include "eocatalogue.redisPort" . | quote }}
+            - name: REDIS_SSL
+              value: {{ include "eocatalogue.redis.tlsEnabled" . }}
+            - name: REDIS_TTL
+              value: {{ .Values.stac.redisTTL | quote }}
+            - name: OTEL_ENABLED
+              value: {{ .Values.stac.traces.serviceName }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.stac.traces.hostName }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.stac.traces.agentPort | quote }}
+            {{- if .Values.stac.extraEnvVars }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.stac.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.stac.extraEnvVarsCM .Values.stac.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.stac.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.stac.extraEnvVarsCM "context" $) }}
+            {{- end }}
+            {{- if .Values.stac.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.stac.extraEnvVarsSecret "context" $) }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.stac.resources }}
+          resources: {{- toYaml .Values.stac.resources | nindent 12 }}
+          {{- end }}
+          {{- if .Values.stac.extraVolumeMounts }}
+          volumeMounts: {{- toYaml .Values.stac.extraVolumeMounts | nindent 12 }}
+          {{- end }}
+        {{- if .Values.stac.sidecars }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.stac.sidecars "context" $) | nindent 8 }}
+        {{- end }}
+      {{- if or .Values.stac.extraVolumes .Values.stac.initDb }}
+      volumes:
+        {{- if .Values.stac.extraVolumes }}
+        {{- toYaml .Values.stac.extraVolumes | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}

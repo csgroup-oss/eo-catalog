@@ -1,0 +1,731 @@
+## @section Global parameters
+## Global Docker image parameters
+## Please, note that this will override the image parameters, including dependencies, configured to use the global value
+## Current available global Docker image parameters: imageRegistry, imagePullSecrets and storageClass
+##
+
+## @param global.imageRegistry Global Docker image registry
+## @param global.imagePullSecrets Global Docker registry secret names as an array
+## @param global.storageClass Global StorageClass for Persistent Volume(s)
+##
+global:
+  imageRegistry: ""
+  ## E.g.
+  ## imagePullSecrets:
+  ##   - myRegistryKeySecretName
+  ##
+  imagePullSecrets: []
+  storageClass: ""
+
+## @section Common parameters
+##
+
+## @param kubeVersion Force target Kubernetes version (using Helm capabilities if not set)
+##
+kubeVersion: ""
+## @param nameOverride String to partially override common.names.fullname
+##
+nameOverride: ""
+## @param fullnameOverride String to fully override common.names.fullname
+##
+fullnameOverride: ""
+## @param namespaceOverride String to fully override common.names.namespace
+##
+namespaceOverride: ""
+## @param commonLabels Labels to add to all deployed objects
+##
+commonLabels: {}
+## @param commonAnnotations Annotations to add to all deployed objects
+##
+commonAnnotations: {}
+## @param clusterDomain Kubernetes cluster domain name
+##
+clusterDomain: cluster.local
+## @param extraDeploy Array of extra objects to deploy with the release
+##
+extraDeploy: []
+
+## @section EO Catalog STAC API parameters
+stac:
+  ## @param stac.enabled Enabled EO Catalog STAC API
+  enabled: true
+  ## CS Group EO Catalog STAC API image version
+  ## ref: https://643vlk6z.gra7.container-registry.ovh.net/harbor/projects/37/repositories/eo-stac-server
+  ## @param stac.image.registry EO Catalog STAC API image registry
+  ## @param stac.image.repository EO Catalog STAC API image repository
+  ## @param stac.image.tag EO Catalog STAC API image tag (immutable tags are recommended)
+  ## @param stac.image.digest EO Catalog STAC API image digest in the way sha256:aa.... Please note this parameter, if set, will override the tag
+  ## @param stac.image.pullPolicy EO Catalog STAC API image pull policy
+  ## @param stac.image.pullSecrets Specify docker-registry secret names as an array
+  ##
+  image:
+    registry: ghcr.io
+    repository: csgroup-oss/eo-catalog-stac
+    tag: 0.1.0
+    digest: ''
+    ## Specify a imagePullPolicy
+    ## Defaults to 'Always' if image tag is 'latest', else set to 'IfNotPresent'
+    ## ref: https://kubernetes.io/docs/user-guide/images/#pre-pulling-images
+    ##
+    pullPolicy: IfNotPresent
+    ## Optionally specify an array of imagePullSecrets.
+    ## Secrets must be manually created in the namespace.
+    ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+    ## Example:
+    ## pullSecrets:
+    ##   - myRegistryKeySecretName
+    ##
+    pullSecrets: []
+
+  ## @param stac.replicaCount Number of EO Catalog STAC API replicas
+  ##
+  replicaCount: 1
+
+  ## @param stac.appRootPath Path for the STAC catalog
+  ##
+  appRootPath: ""
+
+  ## @param stac.host IP range STAC Server is listening to
+  ##
+  host: 0.0.0.0
+
+  ## @param stac.api.landingPageId id of catalog landing page
+  ## @param stac.api.title title of the catalog landing page
+  ## @param stac.api.description description of the catalog landing page
+  ##
+  api:
+    landingPageId: eo-catalog-stac
+    title: EO Catalog STAC API
+    description: |
+      Searchable spatiotemporal metadata describing Earth science datasets hosted by the EO Catalog STAC API
+
+  ## @param stac.environment Deployment environment. Possible values are development, staging or production
+  ##
+  environment: production
+
+  ## @param stac.debug Run the STAC Server in debug mode
+  ##
+  debug: false
+
+  ## @param stac.dbConnectionSize.min Minimum instances in the database connection pool
+  ## @param stac.dbConnectionSize.max Maximum instances in the database connection pool
+  ##
+  dbConnectionSize:
+    min: 1
+    max: 1
+
+  ## @param stac.initDb Run `pypgstac migrate` to initialize the database
+  ##
+  initDb: true
+
+  ## @param stac.redisTTL Disable stac caching in development by setting TTL to 1 second
+  ##
+  redisTTL: 600
+  ## @param stac.redisCluster Inform STAC API if connection is set to a Redis Cluster
+  ##
+  redisCluster: false
+
+  ## @param stac.useApiHydrate Pgcatalog hydration
+  ##
+  useApiHydrate: true
+
+  ## @param stac.requestTimeout
+  ##
+  requestTimeout: 30
+
+  ## @param stac.otel.enabled
+  ## @param stac.otel.serviceName
+  ## @param stac.otel.exporterEndpoint
+  ##
+  otel:
+    enabled: false
+    serviceName: eo-catalog
+    exporterEndpoint:
+  ## Configure extra options for EO Catalog STAC API containers' liveness and readiness probes
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/#configure-probes
+  ## @param stac.startupProbe.enabled Enable startupProbe on EO Catalog STAC API containers
+  ## @param stac.startupProbe.initialDelaySeconds Initial delay seconds for startupProbe
+  ## @param stac.startupProbe.periodSeconds Period seconds for startupProbe
+  ## @param stac.startupProbe.timeoutSeconds Timeout seconds for startupProbe
+  ## @param stac.startupProbe.failureThreshold Failure threshold for startupProbe
+  ## @param stac.startupProbe.successThreshold Success threshold for startupProbe
+  ##
+  startupProbe:
+    enabled: false
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+    successThreshold: 1
+  ## @param stac.livenessProbe.enabled Enable livenessProbe on EO Catalog STAC API containers
+  ## @param stac.livenessProbe.initialDelaySeconds Initial delay seconds for livenessProbe
+  ## @param stac.livenessProbe.periodSeconds Period seconds for livenessProbe
+  ## @param stac.livenessProbe.timeoutSeconds Timeout seconds for livenessProbe
+  ## @param stac.livenessProbe.failureThreshold Failure threshold for livenessProbe
+  ## @param stac.livenessProbe.successThreshold Success threshold for livenessProbe
+  ##
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+    successThreshold: 1
+  ## @param stac.readinessProbe.enabled Enable readinessProbe on EO Catalog STAC API containers
+  ## @param stac.readinessProbe.initialDelaySeconds Initial delay seconds for readinessProbe
+  ## @param stac.readinessProbe.periodSeconds Period seconds for readinessProbe
+  ## @param stac.readinessProbe.timeoutSeconds Timeout seconds for readinessProbe
+  ## @param stac.readinessProbe.failureThreshold Failure threshold for readinessProbe
+  ## @param stac.readinessProbe.successThreshold Success threshold for readinessProbe
+  ##
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+    successThreshold: 1
+  ## @param stac.customLivenessProbe Custom livenessProbe that overrides the default one
+  ##
+  customLivenessProbe: {}
+
+  ## @param stac.customReadinessProbe Custom readinessProbe that overrides the default one
+  ##
+  customReadinessProbe: {}
+
+  ## EO Catalog STAC API resource requests and limits
+  ## ref: https://kubernetes.io/docs/user-guide/compute-resources/
+  ## @param stac.resources.limits The resources limits for the EO Catalog STAC API containers
+  ## @param stac.resources.requests The requested resources for the EO Catalog STAC API containers
+  ##
+  resources:
+    limits: {}
+    requests: {}
+
+  ## EO Catalog STAC API horizontal autoscaling
+  ## ref: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+  ## @param stac.horizontalPodAutoscaler.enabled Decide to enable or disable the horizontal pod autoscaler
+  ## @param stac.horizontalPodAutoscaler.maxReplicas The maximum number of replicas that are allowed to run simultaneously
+  ## @param stac.horizontalPodAutoscaler.cpuUtilization The maximum CPU utilization target computed in % of the CPU resources request.
+  ## @param stac.horizontalPodAutoscaler.memUtilization The maximum RAM utilization target computed in % of the RAM resources request.
+  ##
+  horizontalPodAutoscaler:
+    enabled: false
+    maxReplicas: 10
+    cpuUtilization: 50
+    memUtilization: 50
+
+  ## Configure Pods Security Context
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+  ## @param stac.podSecurityContext.enabled Enabled EO Catalog STAC API pods' Security Context
+  ## @param stac.podSecurityContext.fsGroup Set EO Catalog STAC API pod's Security Context fsGroup
+  ##
+  podSecurityContext:
+    enabled: true
+    fsGroup: 1001
+
+  ## Configure Container Security Context
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+  ## @param stac.containerSecurityContext.enabled Enabled EO Catalog STAC API containers' Security Context
+  ## @param stac.containerSecurityContext.runAsUser Set EO Catalog STAC API containers' Security Context runAsUser
+  ## @param stac.containerSecurityContext.allowPrivilegeEscalation Set EO Catalog STAC API containers' Security Context allowPrivilegeEscalation
+  ## @param stac.containerSecurityContext.capabilities.drop Set EO Catalog STAC API containers' Security Context capabilities to be dropped
+  ## @param stac.containerSecurityContext.readOnlyRootFilesystem Set EO Catalog STAC API containers' Security Context readOnlyRootFilesystem
+  ## @param stac.containerSecurityContext.runAsNonRoot Set EO Catalog STAC API container's Security Context runAsNonRoot
+  ##
+  containerSecurityContext:
+    enabled: true
+    runAsUser: 1001
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: false
+    runAsNonRoot: true
+
+  ## @param stac.command Override default container command (useful when using custom images)
+  ##
+  command: []
+
+  ## @param stac.args Override default container args (useful when using custom images). Overrides the defaultArgs.
+  ##
+  args: []
+
+  ## EO Catalog STAC API application  ports
+  ## @param stac.containerPorts.http EO Catalog STAC API application HTTP port number
+  containerPorts:
+    http: 8080
+
+  ## @param stac.hostAliases EO Catalog STAC API pods host aliases
+  ## https://kubernetes.io/docs/concepts/services-networking/add-entries-to-pod-etc-hosts-with-host-aliases/
+  ##
+  hostAliases: []
+
+  ## @param stac.podLabels Extra labels for EO Catalog STAC API pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+  ##
+  podLabels: {}
+
+  ## @param stac.podAnnotations Annotations for EO Catalog STAC API pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
+
+  ## @param stac.podAffinityPreset Pod affinity preset. Ignored if `affinity` is set. Allowed values: `soft` or `hard`
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity
+  ##
+  podAffinityPreset: ""
+
+  ## @param stac.podAntiAffinityPreset Pod anti-affinity preset. Ignored if `affinity` is set. Allowed values: `soft` or `hard`
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity
+  ##
+  podAntiAffinityPreset: soft
+
+  ## Node affinity preset
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
+  ##
+  nodeAffinityPreset:
+    ## @param stac.nodeAffinityPreset.type Node affinity preset type. Ignored if `affinity` is set. Allowed values: `soft` or `hard`
+    ##
+    type: ""
+    ## @param stac.nodeAffinityPreset.key Node label key to match. Ignored if `affinity` is set
+    ##
+    key: ""
+    ## @param stac.nodeAffinityPreset.values Node label values to match. Ignored if `affinity` is set
+    ## E.g.
+    ## values:
+    ##   - e2e-az1
+    ##   - e2e-az2
+    ##
+    values: []
+
+  ## @param stac.affinity Affinity for EO Catalog STAC API pods assignment
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  ## NOTE: `podAffinityPreset`, `podAntiAffinityPreset`, and `nodeAffinityPreset` will be ignored when it's set
+  ##
+  affinity: {}
+
+  ## @param stac.nodeSelector Node labels for EO Catalog STAC API pods assignment
+  ## ref: https://kubernetes.io/docs/user-guide/node-selection/
+  ##
+  nodeSelector: {}
+
+  ## @param stac.tolerations Tolerations for EO Catalog STAC API pods assignment
+  ## ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+  ##
+  tolerations: []
+
+  ## @param stac.schedulerName Name of the k8s scheduler (other than default)
+  ## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
+  ##
+  schedulerName: ""
+
+  ## @param stac.shareProcessNamespace Enable shared process namespace in a pod.
+  ## If set to false (default), each container will run in separate namespace,  will have PID=1.
+  ## If set to true, the /pause will run as init process and will reap any zombie PIDs,
+  ## for example, generated by a custom exec probe running longer than a probe timeoutSeconds.
+  ## Enable this only if customLivenessProbe or customReadinessProbe is used and zombie PIDs are accumulating.
+  ## Ref: https://kubernetes.io/docs/tasks/configure-pod-container/share-process-namespace/
+  ##
+  shareProcessNamespace: false
+
+  ## @param stac.topologySpreadConstraints Topology Spread Constraints for pod assignment
+  ## https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
+  ## The value is evaluated as a template
+  ##
+  topologySpreadConstraints: []
+
+  ## @param stac.updateStrategy.type EO Catalog STAC API statefulset strategy type
+  ## ref: https://kubernetes.io/docs/concepts/workloads/s/statefulset/#update-strategies
+  ##
+  updateStrategy:
+    ## StrategyType
+    ## Can be set to RollingUpdate or OnDelete
+    ##
+    type: RollingUpdate
+
+  ## @param stac.priorityClassName EO Catalog STAC API pods' priorityClassName
+  ##
+  priorityClassName: ""
+
+  ## @param stac.runtimeClassName Name of the runtime class to be used by pod(s)
+  ## ref: https://kubernetes.io/docs/concepts/containers/runtime-class/
+  ##
+  runtimeClassName: ""
+
+  ## @param stac.lifecycleHooks for the EO Catalog STAC API container(s) to automate configuration before or after startup
+  ##
+  lifecycleHooks: {}
+
+  ## @param stac.extraEnvVars Array with extra environment variables to add to EO Catalog STAC API nodes
+  ## e.g:
+  ## extraEnvVars:
+  ##   - name: FOO
+  ##     value: "bar"
+  ##
+  extraEnvVars: []
+
+  ## @param stac.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for EO Catalog STAC API nodes
+  ##
+  extraEnvVarsCM: ""
+
+  ## @param stac.extraEnvVarsSecret Name of existing Secret containing extra env vars for EO Catalog STAC API nodes
+  ##
+  extraEnvVarsSecret: ""
+
+  ## @param stac.extraVolumes Optionally specify extra list of additional volumes for the EO Catalog STAC API pod(s)
+  ##
+  extraVolumes: []
+
+  ## @param stac.extraVolumeMounts Optionally specify extra list of additional volumeMounts for the EO Catalog STAC API container(s)
+  ##
+  extraVolumeMounts: []
+
+  ## @param stac.sidecars Add additional sidecar containers to the EO Catalog STAC API pod(s)
+  ## e.g:
+  ## sidecars:
+  ##   - name: your-image-name
+  ##     image: your-image
+  ##     imagePullPolicy: Always
+  ##     ports:
+  ##       - name: portname
+  ##         containerPort: 1234
+  ##
+  sidecars: []
+
+  ## @param stac.initContainers Add additional init containers to the EO Catalog STAC API pod(s)
+  ## ref: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
+  ## e.g:
+  ## initContainers:
+  ##  - name: your-image-name
+  ##    image: your-image
+  ##    imagePullPolicy: Always
+  ##    command: ['sh', '-c', 'echo "hello world"']
+  ##
+  initContainers: []
+
+  ## Service configuration
+  ##
+  service:
+    ## @param stac.service.type Kubernetes service type
+    ##
+    type: ClusterIP
+    ## @param stac.service.http.enabled Enable http port on service
+    ##
+    http:
+      enabled: true
+    ## @param stac.service.ports.http EO Catalog STAC API service HTTP port
+    ##
+    ports:
+      http: 8080
+    ## @param stac.service.nodePorts [object] Specify the nodePort values for the LoadBalancer and NodePort service types.
+    ## ref: https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport
+    ##
+    nodePorts:
+      http: ""
+    ## @param stac.service.sessionAffinity Control where client requests go, to the same pod or round-robin
+    ## Values: ClientIP or None
+    ## ref: https://kubernetes.io/docs/user-guide/services/
+    ##
+    sessionAffinity: None
+    ## @param stac.service.sessionAffinityConfig Additional settings for the sessionAffinity
+    ## sessionAffinityConfig:
+    ##   clientIP:
+    ##     timeoutSeconds: 300
+    ##
+    sessionAffinityConfig: {}
+    ## @param stac.service.clusterIP EO Catalog STAC API service clusterIP IP
+    ## e.g:
+    ## clusterIP: None
+    ##
+    clusterIP: ""
+    ## @param stac.service.loadBalancerIP loadBalancerIP for the SuiteCRM Service (optional, cloud specific)
+    ## ref: https://kubernetes.io/docs/user-guide/services/#type-loadbalancer
+    ##
+    loadBalancerIP: ""
+    ## @param stac.service.loadBalancerSourceRanges Address that are allowed when service is LoadBalancer
+    ## https://kubernetes.io/docs/tasks/access-application-cluster/configure-cloud-provider-firewall/#restrict-access-for-loadbalancer-service
+    ## Example:
+    ## loadBalancerSourceRanges:
+    ##   - 10.10.10.0/24
+    ##
+    loadBalancerSourceRanges: []
+    ## @param stac.service.externalTrafficPolicy Enable client source IP preservation
+    ## ref https://kubernetes.io/docs/tasks/access-application-cluster/create-external-load-balancer/#preserving-the-client-source-ip
+    ##
+    externalTrafficPolicy: Cluster
+    ## @param stac.service.annotations Additional custom annotations for EO Catalog STAC API service
+    ##
+    annotations: {}
+    ## @param stac.service.extraPorts Extra port to expose on EO Catalog STAC API service
+    ##
+    extraPorts: []
+
+  ## Configure the ingress for the EO Catalog STAC API
+  ## Ref: https://kubernetes.io/docs/user-guide/ingress/
+  ## @param stac.ingress.enabled Enable the creation of an ingress for the EO Catalog STAC API
+  ## @param stac.ingress.pathType Path type for the EO Catalog STAC API ingress
+  ## @param stac.ingress.apiVersion Ingress API version for the EO Catalog STAC API ingress
+  ## @param stac.ingress.hostname Ingress hostname for the EO Catalog STAC API ingress
+  ## @param stac.ingress.annotations [object] Annotations for the EO Catalog STAC API ingress. To enable certificate autogeneration, place here your cert-manager annotations.
+  ## @param stac.ingress.tls Enable TLS for the EO Catalog STAC API ingress
+  ## @param stac.ingress.extraHosts Extra hosts array for the EO Catalog STAC API ingress
+  ## @param stac.ingress.path Path array for the EO Catalog STAC API ingress
+  ## @param stac.ingress.extraPaths Extra paths for the EO Catalog STAC API ingress
+  ## @param stac.ingress.extraTls Extra TLS configuration for the EO Catalog STAC API ingress
+  ## @param stac.ingress.secrets Secrets array to mount into the Ingress
+  ## @param stac.ingress.ingressClassName IngressClass that will be be used to implement the Ingress (Kubernetes 1.18+)
+  ##
+  ingress:
+    ## Set to true to enable ingress record generation
+    ##
+    enabled: false
+    ## @param stac.ingress.selfSigned Create a TLS secret for this ingress record using self-signed certificates generated by Helm
+    ##
+    selfSigned: false
+    ## Ingress Path type
+    ##
+    pathType: ImplementationSpecific
+    ## Override API Version (automatically detected if not set)
+    ##
+    apiVersion: ""
+    ## When the ingress is enabled, a host pointing to this will be created
+    ##
+    hostname: eo-catalog-stac-api.local
+    ## The Path to EO Catalog STAC API. You may need to set this to '/*' in order to use this
+    ## with ALB ingress s.
+    ##
+    path: /
+    ## For a full list of possible ingress annotations, please see
+    ## ref: https://github.com/kubernetes/ingress-nginx/blob/master/docs/user-guide/nginx-configuration/annotations.md
+    ## Use this parameter to set the required annotations for cert-manager, see
+    ## ref: https://cert-manager.io/docs/usage/ingress/#supported-annotations
+    ##
+    ## e.g:
+    ## annotations:
+    ##   kubernetes.io/ingress.class: nginx
+    ##   cert-manager.io/cluster-issuer: cluster-issuer-name
+    ##
+    annotations:
+      nginx.ingress.kubernetes.io/enable-cors: "true"
+      nginx.ingress.kubernetes.io/cors-allow-headers: X-Request-Entity,Content-Type,Authorization
+    ## Enable TLS configuration for the hostname defined at ingress.hostname parameter
+    ## TLS certificates will be retrieved from a TLS secret with name: {{- printf "%s-tls" .Values.ingress.hostname }}
+    ## You can use the ingress.secrets parameter to create this TLS secret or rely on cert-manager to create it
+    ##
+    tls: false
+    ## The list of additional hostnames to be covered with this ingress record.
+    ## Most likely the hostname above will be enough, but in the event more hosts are needed, this is an array
+    extraHosts: []
+    ## - name: eo-catalog-stac-api.local
+    ##   path: /
+    ##
+    ## Any additional arbitrary paths that may need to be added to the ingress under the main host.
+    ## For example: The ALB ingress  requires a special rule for handling SSL redirection.
+    extraPaths: []
+    ## - path: /*
+    ##   backend:
+    ##     serviceName: ssl-redirect
+    ##     servicePort: use-annotation
+    ##
+    ## The tls configuration for additional hostnames to be covered with this ingress record.
+    ## see: https://kubernetes.io/docs/concepts/services-networking/ingress/#tls
+    extraTls: []
+    ## - hosts:
+    ##     - eo-catalog-stac-api.local
+    ##   secretName: eo-catalog-stac-api.local-tls
+    ##
+
+    ## If you're providing your own certificates, please use this to add the certificates as secrets
+    ## key and certificate should start with -----BEGIN CERTIFICATE----- or
+    ## -----BEGIN RSA PRIVATE KEY-----
+    ##
+    ## name should line up with a tlsSecret set further up
+    ## If you're using cert-manager, this is unneeded, as it will create the secret for you if it is not set
+    ##
+    ## It is also possible to create and manage the certificates outside of this helm chart
+    ## Please see README.md for more information
+    ##
+    secrets: []
+    ## - name: eo-catalog-stac-api.local-tls
+    ##   key:
+    ##   certificate:
+    ##
+
+    ## This is supported in Kubernetes 1.18+ and required if you have more than one IngressClass marked as the default for your cluster .
+    ## ref: https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/
+    ##
+    ingressClassName: ""
+    ## @param stac.ingress.extraRules Additional rules to be covered with this ingress record
+    ## ref: https://kubernetes.io/docs/concepts/services-networking/ingress/#ingress-rules
+    ## e.g:
+    ## extraRules:
+    ## - host: example.local
+    ##     http:
+    ##       path: /
+    ##       backend:
+    ##         service:
+    ##           name: example-svc
+    ##           port:
+    ##             name: http
+    ##
+    extraRules: []
+
+  ## ServiceAccount configuration
+  ##
+  serviceAccount:
+    ## @param stac.serviceAccount.create Specifies whether a ServiceAccount should be created
+    ##
+    create: true
+    ## @param stac.serviceAccount.name The name of the ServiceAccount to use.
+    ## If not set and create is true, a name is generated using the common.names.fullname template
+    ##
+    name: ""
+    ## @param stac.serviceAccount.annotations Additional custom annotations for the ServiceAccount
+    ##
+    annotations: {}
+    ## @param stac.serviceAccount.automountServiceAccountToken Automount service account token for the server service account
+    ##
+    automountServiceAccountToken: true
+
+  ## EO Catalog Wait-for-redis parameters
+  ## Wait-for-redis init container configuration
+  ##
+  redisWait:
+    ## @param stac.redisWait.enabled Enables waiting for redis
+    ##
+    enabled: true
+    ## @param stac.redisWait.extraArgs Additional arguments for the redis-cli call, such as TLS
+    ##
+    extraArgs: ''
+    ## @param stac.redisWait.securityContext Security context for init container
+    ##
+    securityContext: {}
+
+## @section EO Catalog PostgreSQL parameters
+## PostgreSQL chart configuration
+## ref: https://github.com/bitnami/charts/blob/main/bitnami/postgresql/values.yaml
+## @param postgresql.enabled Switch to enable or disable the PostgreSQL helm chart
+## @param postgresql.auth.postgresPassword Password for the "postgres" admin user. Ignored if `auth.existingSecret` with key `postgres-password` is provided
+## @param postgresql.auth.username Name for a custom user to create
+## @param postgresql.auth.password Password for the custom user to create
+## @param postgresql.auth.database Name for a custom database to create
+## @param postgresql.auth.existingSecret Name of existing secret to use for PostgreSQL credentials
+## @param postgresql.architecture PostgreSQL architecture (`standalone` or `replication`)
+## @param postgresql.primary.initdb.scripts [object] Dictionary of initdb scripts
+##
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: ""
+    username: eo-catalogue
+    password: ""
+    database: postgis
+    existingSecret: ""
+  architecture: standalone
+  primary:
+    initdb:
+      scripts:
+        init.sql: |
+          CREATE EXTENSION postgis;
+
+## @section EO Catalog Redis parameters
+## Redis parameters
+##
+redis:
+
+  ## @param redis.enabled Enable Redis dependency
+  ##
+  enabled: true
+
+  ## @param redis.nameOverride Name override for the Redis dependency
+  ##
+  nameOverride: ""
+  ## @param redis.service.port Service port for Redis dependency
+  ##
+  service:
+    port: 6379
+
+  ## Use password authentication
+  ## @param redis.auth.enabled Enable Redis dependency authentication
+  ## @param redis.auth.existingSecret Existing secret to load redis dependency password
+  ## @param redis.auth.existingSecretPasswordKey Pasword key name inside the existing secret
+  ##
+  auth:
+    enabled: true
+    ## Name of existing secret object containing the password
+    ##
+    existingSecret: ""
+    ##
+    ## Password key to be retrieved from Redis&reg; secret
+    ##
+    existingSecretPasswordKey: 'redis-password'
+
+  ## Cluster settings
+  ## @param redis.architecture Redis&reg; architecture. Allowed values: `standalone` or `replication`
+  ## TODO(miguelaeh): We need to test the chart with redis sentinel, it seems to be supported at: https://github.com/argoproj/argo-cd/blob/2a410187565e15633b6f2a8c8d8da22cf02b257d/util/cache/cache.go#L40
+  ##
+  architecture: standalone
+
+  ## TLS configuration
+  ##
+  tls:
+    ## @param redis.tls.enabled Enable TLS traffic
+    ##
+    enabled: false
+
+## @section EO Catalog external database parameters
+## External PostgreSQL configuration
+## All of these values are only used when postgresql.enabled is set to false
+## @param externalDatabase.host Database host
+## @param externalDatabase.hostWriter Database host for write operations. Default to externalDatabase.host. Needed when externalDatabase.host is readonly
+## @param externalDatabase.port Database port number
+## @param externalDatabase.user Non-root username for EO Catalog STAC API
+## @param externalDatabase.password Password for the non-root username for EO Catalog STAC API
+## @param externalDatabase.postgresPassword Password for the root username for EO Catalog STAC API
+## @param externalDatabase.database EO Catalog STAC API database name
+## @param externalDatabase.existingSecret Name of an existing secret resource containing the database credentials
+## @param externalDatabase.existingSecretPasswordKey Name of an existing secret key containing the database credentials
+## @param externalDatabase.existingSecretPostgresPasswordKey Name of an existing secret key containing the database postgres credentials
+##
+externalDatabase:
+  host: ""
+  hostWriter: ""
+  port: 5432
+  user: eo-catalogue
+  database: postgis
+  password: ""
+  postgresPassword: ""
+  existingSecret: ""
+  existingSecretPasswordKey: ""
+  existingSecretPostgresPasswordKey: ""
+
+## @section EO Catalog external Redis parameters
+##
+## External Redis&reg;
+##
+externalRedis:
+  ## Redis&reg; host
+  ## @param externalRedis.host External Redis host
+  ##
+  host: ""
+  ## Redis&reg; port
+  ## @param externalRedis.port External Redis port
+  ##
+  port: 6379
+  ## Redis&reg; password for authentication
+  ## Ignored if existingSecret is set
+  ## @param externalRedis.password External Redis password
+  ##
+  password: ""
+  ## Name of existing secret object containing the password
+  ## @param externalRedis.existingSecret Existing secret for the external redis
+  ##
+  existingSecret: ""
+  ## Password key to be retrieved from Redis&reg; secret
+  ## @param externalRedis.existingSecretPasswordKey Password key for the existing secret containing the external redis password
+  ##
+  existingSecretPasswordKey: 'redis-password'
+  ## @param externalRedis.tlsEnabled Enable TLS traffic
+  ##
+  tlsEnabled: false

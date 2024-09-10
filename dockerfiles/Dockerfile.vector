@@ -1,6 +1,6 @@
 ARG PYTHON_VERSION=3.11
 
-FROM ghcr.io/vincentsarago/uvicorn-gunicorn:${PYTHON_VERSION}
+FROM python:${PYTHON_VERSION}-slim
 
 COPY runtimes/eoapi/vector /tmp/vector
 RUN python -m pip install /tmp/vector

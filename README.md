@@ -1,10 +1,7 @@
-
-<p align="center">
-  <img width="500" alt="eoapi-devseed" src="https://github.com/developmentseed/eoapi-devseed/assets/10407788/fc69e5ae-4ab7-491f-8c20-6b9e1372b4c6">
-  <p align="center">Example of eoAPI customization.</p>
-</p>
+<img src="./docs/static/eo-catalogue-logo-1080.webp" align="center" width="200" alt="EO Catalog logo" />
 
 ---
+EO Catalog, a eoAPI customization.
 
 **Documentation**: <a href="https://eoapi.dev/customization/" target="_blank">https://eoapi.dev/customization/</a>
 
@@ -20,12 +17,29 @@ This repository shows an example of how users can customize and deploy their own
 
 #### eoapi.stac
 
-Built on [stac-fastapi.pgstac](https://github.com/stac-utils/stac-fastapi-pgstac) application, adding a **`TiTilerExtension`** and a simple **`Search Viewer`**.
+##### Differencing key features
 
-When the `EOAPI_STAC_TITILER_ENDPOINT` environment variable is set (pointing to the `raster` application) and `titiler` extension is enabled, additional endpoints will be added to the stac-fastapi application (see: [stac/extension.py](https://github.com/developmentseed/eoapi-devseed/blob/main/runtimes/eoapi/stac/eoapi/stac/extension.py)):
+- Add a `TiTilerExtension` and a simple `Search Viewer` (**eoAPI-devseed**)
+- Freetext search (**Not yet released - Requires a build of [pgstac](https://github.com/stac-utils/pgstac) from main branch.**)
+- Authorization with Openid Connect
+- Collection search
+
+When the `TITILER_ENDPOINT` environment variable is set (pointing to the `raster` application) and `titiler` extension is enabled, additional endpoints will be added to the stac-fastapi application:
 
 - `/collections/{collectionId}/items/{itemId}/tilejson.json`: Return the `raster` tilejson for an item
 - `/collections/{collectionId}/items/{itemId}/viewer`: Redirect to the `raster` viewer
+
+##### Optimized for performance in high-demand production environments.
+
+- Telemetry for performance measurement.
+- Distributed caching.
+- Timeout long lasting pending requests.
+- Automatic compression of API responses in Brotli, GZIP and Deflate.
+- Hide successful health pings from logs (from /_mgmt/ping)
+
+##### Configuration
+
+
 
 #### eoapi.raster
 
@@ -72,7 +86,30 @@ If you've added a vector dataset to the `public` schema in the Postgres database
 
 ## Deployment
 
-### Requirements
+Before getting started, make sure you retrieve all the external dependencies.
+
+```shell
+git submodule update --init
+```
+
+### Docker
+
+```shell
+docker compose up -d
+```
+
+
+### Kubernetes
+
+The repository contains deployment code for hosting this service on Kubernetes through running the published docker image and Helm chart.
+
+> The Helm chart only support the STAC API at the moment.
+
+[EO Catalog Helm Chart](./deploy/helm/eocatalog).
+
+### AWS
+
+#### Requirements
 
 - python >=3.9
 - docker
@@ -80,7 +117,7 @@ If you've added a vector dataset to the `public` schema in the Postgres database
 - AWS credentials environment variables configured to point to an account.
 - **Optional** a `config.yaml` file to override the default deployment settings defined in `config.py`.
 
-### Installation
+#### Installation
 
 Install python dependencies with
 

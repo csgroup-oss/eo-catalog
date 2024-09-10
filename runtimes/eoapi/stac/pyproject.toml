@@ -1,12 +1,19 @@
 [project]
-name = "eoapi.stac"
-description = "STAC Metadata service for eoAPI."
+dependencies = [
+    "stac-fastapi.extensions@git+https://github.com/stac-utils/stac-fastapi@3ae8d86741af7370e32807c7e32725c0f51a0a9c#egg=stac-fastapi-extensions&subdirectory=stac_fastapi/extensions",
+    "stac-fastapi.pgstac~=3.0",
+    "jinja2>=2.11.2,<4.0.0",
+    "starlette-cramjam>=0.3,<0.4",
+    "importlib_resources>=1.1.0;python_version<'3.9'",
+    "psycopg_pool",
+    "eoapi.auth-utils>=0.2.0",
+]
+name = "eocatalog.stac"
+description = "STAC Metadata service for EO Catalog."
 readme = "README.md"
 requires-python = ">=3.8"
-authors = [
-    {name = "Vincent Sarago", email = "vincent@developmentseed.com"},
-]
-license = {text = "MIT"}
+authors = [{ name = "CS GROUP - France" }]
+license = { text = "MIT" }
 classifiers = [
     "Intended Audience :: Information Technology",
     "Intended Audience :: Science/Research",
@@ -15,25 +22,29 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: GIS",
 ]
 dynamic = ["version"]
-dependencies = [
-    "stac-fastapi.pgstac==3.0.0a4",
-    "jinja2>=2.11.2,<4.0.0",
-    "starlette-cramjam>=0.3,<0.4",
-    "importlib_resources>=1.1.0;python_version<'3.9'",
-    "psycopg_pool",
-    "eoapi.auth-utils>=0.2.0",
-]
 
 [project.optional-dependencies]
-test = [
-    "pytest",
-    "pytest-cov",
-    "pytest-asyncio",
-    "httpx",
+test = ["pytest", "pytest-cov", "pytest-asyncio", "httpx"]
+telemetry = [
+    "opentelemetry-api~=1.26",
+    "opentelemetry-sdk~=1.26",
+    "opentelemetry-exporter-otlp-proto-http~=1.26",
 ]
+redis = ["redis"]
+dev = ["ruff", "mypy", "pre-commit"]
+server = ["uvicorn[standard]==0.30.6"]
+
+[project.urls]
+Homepage = "https://github.com/csgroup-oss/eo-catalog"
+Repository = "https://github.com/csgroup-oss/eo-catalog"
+"Bug Tracker" = "https://github.com/csgroup-oss/eo-catalog/issues"
+
+[project.scripts]
+eocatalog-stac = "eoapi.stac.app:app"
 
 [build-system]
 requires = ["pdm-pep517"]
@@ -46,3 +57,40 @@ path = "eoapi/stac/__init__.py"
 [tool.pdm.build]
 includes = ["eoapi/stac"]
 excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
+
+[tool.mypy]
+ignore_missing_imports = true
+disallow_untyped_defs = true
+
+[tool.pytest.pytest_options]
+markers = """
+    databaseConnection: marks the tests that establish actual database connection
+mocked: marks the tests that mock the connections such as httpx and database
+"""
+asyncio_mode = "auto"
+env_files = [".env"]
+addopts = "-m \"mocked and not databaseConnection and not httpConnection\""
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C90", "I"]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 120
+
+[tool.ruff.lint.isort]
+known-first-party = ["eo-catalog.stac"]
+known-third-party = ["stac-pydantic", "fastapi", "stac_fastapi"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]

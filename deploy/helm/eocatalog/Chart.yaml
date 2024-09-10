@@ -1,0 +1,23 @@
+apiVersion: v2
+dependencies:
+  - condition: postgresql.enabled
+    name: postgresql
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 15.x.x
+  - condition: redis.enabled
+    name: redis
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 20.x.x
+  - name: common
+    repository: oci://registry-1.docker.io/bitnamicharts
+    tags:
+      - bitnami-common
+    version: 2.x
+description: A CS Group Earth Observation solution.
+home: https://github.com/csgroup-oss/eo-catalogue
+icon: https://github.com/csgroup-oss/eo-catalogue/-/blob/main/docs/static/eo-catalogue-logo-1080.webp
+name: eo-catalogue
+sources:
+  - https://github.com/csgroup-oss/eo-catalogue
+type: application
+version: 0.9.0

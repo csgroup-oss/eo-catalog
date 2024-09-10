@@ -1,0 +1,56 @@
+{{- if .Values.stac.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eocatalogue.stac" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" . | nindent 4 }}
+    app.kubernetes.io/component: stac-api
+    {{- if .Values.commonLabels }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.commonLabels "context" $) | nindent 4 }}
+    {{- end }}
+  {{- if or .Values.commonAnnotations .Values.stac.service.annotations }}
+  annotations:
+  {{- if .Values.commonAnnotations }}
+  {{- include "common.tplvalues.render" (dict "value" .Values.commonAnnotations "context" $) | nindent 4 }}
+  {{- end }}
+  {{- if .Values.stac.service.annotations }}
+  {{- include "common.tplvalues.render" (dict "value" .Values.stac.service.annotations "context" $) | nindent 4 }}
+  {{- end }}
+  {{- end }}
+spec:
+  type: {{ .Values.stac.service.type }}
+  {{- if and .Values.stac.service.clusterIP (eq .Values.stac.service.type "ClusterIP") }}
+  clusterIP: {{ .Values.stac.service.clusterIP }}
+  {{- end }}
+  {{- if (or (eq .Values.stac.service.type "LoadBalancer") (eq .Values.stac.service.type "NodePort")) }}
+  externalTrafficPolicy: {{ .Values.stac.service.externalTrafficPolicy | quote }}
+  {{- end }}
+  {{- if eq .Values.stac.service.type "LoadBalancer" }}
+  loadBalancerSourceRanges: {{ .Values.stac.service.loadBalancerSourceRanges }}
+  {{- end }}
+  {{- if (and (eq .Values.stac.service.type "LoadBalancer") (not (empty .Values.stac.service.loadBalancerIP))) }}
+  loadBalancerIP: {{ .Values.stac.service.loadBalancerIP }}
+  {{- end }}
+  {{- if .Values.stac.service.sessionAffinity }}
+  sessionAffinity: {{ .Values.stac.service.sessionAffinity }}
+  {{- end }}
+  {{- if .Values.stac.service.sessionAffinityConfig }}
+  sessionAffinityConfig: {{- include "common.tplvalues.render" (dict "value" .Values.stac.service.sessionAffinityConfig "context" $) | nindent 4 }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.stac.service.ports.http }}
+      targetPort: http
+      protocol: TCP
+      name: http
+      {{- if (and (or (eq .Values.stac.service.type "NodePort") (eq .Values.stac.service.type "LoadBalancer")) (not (empty .Values.stac.service.nodePort))) }}
+      nodePort: {{ .Values.stac.service.nodePorts.http }}
+      {{- else if eq .Values.stac.service.type "ClusterIP" }}
+      nodePort: null
+      {{- end }}
+    {{- if .Values.stac.service.extraPorts }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.stac.service.extraPorts "context" $) | nindent 4 }}
+    {{- end }}
+  selector: {{- include "common.labels.matchLabels" . | nindent 4 }}
+    app.kubernetes.io/component: stac-api
+{{- end }}

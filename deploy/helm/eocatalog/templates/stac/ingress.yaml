@@ -1,0 +1,63 @@
+{{- if and .Values.stac.enabled .Values.stac.ingress.enabled -}}
+apiVersion: {{ include "common.capabilities.ingress.apiVersion" . }}
+kind: Ingress
+metadata:
+  name: {{ include "eocatalogue.stac" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" . | nindent 4 }}
+    app.kubernetes.io/component: stac-api
+    {{- if .Values.commonLabels }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.commonLabels "context" $) | nindent 4 }}
+    {{- end }}
+  {{- if or .Values.stac.ingress.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.stac.ingress.annotations }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.stac.ingress.annotations "context" $) | nindent 4 }}
+    {{- end }}
+    {{- if .Values.commonAnnotations }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.commonAnnotations "context" $) | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- if and .Values.stac.ingress.ingressClassName (eq "true" (include "common.ingress.supportsIngressClassname" .)) }}
+  ingressClassName: {{ .Values.stac.ingress.ingressClassName | quote }}
+  {{- end }}
+  rules:
+    {{- if .Values.stac.ingress.hostname }}
+    - host: {{ .Values.stac.ingress.hostname }}
+      http:
+        paths:
+          {{- if .Values.stac.ingress.extraPaths }}
+          {{- toYaml .Values.stac.ingress.extraPaths | nindent 10 }}
+          {{- end }}
+          - path: {{ .Values.stac.ingress.path }}
+            {{- if eq "true" (include "common.ingress.supportsPathType" .) }}
+            pathType: {{ .Values.stac.ingress.pathType }}
+            {{- end }}
+            backend: {{- include "common.ingress.backend" (dict "serviceName" (include "eocatalogue.stac" .) "servicePort" "http" "context" $)  | nindent 14 }}
+    {{- end }}
+    {{- range .Values.stac.ingress.extraHosts }}
+    - host: {{ .name | quote }}
+      http:
+        paths:
+          - path: {{ default "/" .path }}
+            {{- if eq "true" (include "common.ingress.supportsPathType" $) }}
+            pathType: {{ default "ImplementationSpecific" .pathType }}
+            {{- end }}
+            backend: {{- include "common.ingress.backend" (dict "serviceName" (include "eocatalogue.stac" $) "servicePort" "http" "context" $) | nindent 14 }}
+    {{- end }}
+    {{- if .Values.stac.ingress.extraRules }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.stac.ingress.extraRules "context" $) | nindent 4 }}
+    {{- end }}
+  {{- if or .Values.stac.ingress.tls .Values.stac.ingress.extraTls }}
+  tls:
+    {{- if .Values.stac.ingress.tls }}
+    - hosts:
+        - {{ .Values.stac.ingress.hostname | quote }}
+      secretName: {{ printf "%s-tls" .Values.stac.ingress.hostname }}
+    {{- end }}
+    {{- if .Values.stac.ingress.extraTls }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.stac.ingress.extraTls "context" $) | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end -}}
