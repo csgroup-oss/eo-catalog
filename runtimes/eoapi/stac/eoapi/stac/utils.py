@@ -23,10 +23,11 @@
 # SOFTWARE.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 from urllib.parse import urlparse
 
 from eoapi.stac.constants import X_FORWARDED_FOR, X_ORIGINAL_FORWARDED_FOR
+from stac_fastapi.types.stac import Collections
 
 if TYPE_CHECKING:
     from fastapi import Request
@@ -44,3 +45,12 @@ def get_request_ip(request: Request) -> str:
 
     # If multiple IPs, take the last one
     return ip_header.split(",")[-1] if ip_header else ""
+
+def get_scopes_for_collections(collections: Collections) -> Dict[str, str]:
+    collection_scopes = {}
+    for collection in collections["collections"]:
+        if "scope" in collection:
+            collection_scopes[collection["id"]] = collection["scope"]
+        else:
+            collection_scopes[collection["id"]] = None
+    return collection_scopes

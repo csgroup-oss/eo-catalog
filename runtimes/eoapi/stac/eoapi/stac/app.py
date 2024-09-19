@@ -26,10 +26,20 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import List
 
+from buildpg import render
+from eoapi.auth_utils import OpenIdConnectAuth
+from eoapi.stac.config import Settings
+from eoapi.stac.constants import CACHE_KEY_COLLECTIONS
+from eoapi.stac.core import EOCClient
+from eoapi.stac.extensions.filter import FiltersClient
+from eoapi.stac.extensions.titiller import TiTilerExtension
+from eoapi.stac.logs import init_logging
+from eoapi.stac.middlewares.timeout import add_timeout
+from eoapi.stac.utils import get_scopes_for_collections
 from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
+from fastapi.routing import APIRoute
 from stac_fastapi.api.app import StacApi
 from stac_fastapi.api.middleware import ProxyHeaderMiddleware
 from stac_fastapi.api.models import (
@@ -40,21 +50,19 @@ from stac_fastapi.api.models import (
     create_request_model,
 )
 from stac_fastapi.extensions.core import (
-    CollectionSearchExtension,
     FieldsExtension,
     FilterExtension,
     FreeTextAdvancedExtension,
-    FreeTextExtension,
     SortExtension,
     TokenPaginationExtension,
-    TransactionExtension,
+    TransactionExtension, CollectionSearchExtension,
 )
 from stac_fastapi.extensions.third_party import BulkTransactionExtension
 from stac_fastapi.pgstac.db import close_db_connection, connect_to_db
 from stac_fastapi.pgstac.extensions import QueryExtension
 from stac_fastapi.pgstac.transactions import BulkTransactionsClient, TransactionsClient
 from stac_fastapi.pgstac.types.search import PgstacSearch
-from stac_fastapi.types.extension import ApiExtension
+from stac_fastapi.types.stac import Collections
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -62,14 +70,7 @@ from starlette.responses import HTMLResponse
 from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
-from eoapi.auth_utils import OpenIdConnectAuth, OpenIdConnectSettings
-from eoapi.stac.config import Settings
-from eoapi.stac.core import EOCClient
-from eoapi.stac.extensions.collection_search import CollectionSearchGetRequest
-from eoapi.stac.extensions.filter import FiltersClient
-from eoapi.stac.extensions.titiller import TiTilerExtension
-from eoapi.stac.logs import init_logging
-from eoapi.stac.middlewares.timeout import add_timeout
+from auth import EoApiOpenIdConnectSettings, oidc_auth_from_settings
 
 try:
     from importlib.resources import files as resources_files  # type: ignore
@@ -77,10 +78,8 @@ except ImportError:
     # Try backported to PY<39 `importlib_resources`.
     from importlib_resources import files as resources_files  # type: ignore
 
-
-templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))  # type: ignore
-
-auth_settings = OpenIdConnectSettings()
+templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))
+auth_settings = EoApiOpenIdConnectSettings()
 settings = Settings(enable_response_models=True)
 
 # Logs
@@ -128,6 +127,34 @@ async def lifespan(app: FastAPI):
         from eoapi.stac.redis import connect_to_redis
 
         await connect_to_redis(app)
+
+    if auth_settings.openid_configuration_url:
+        collections = await fetch_all_collections_raw()
+        collection_scopes = get_scopes_for_collections(collections)
+        oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
+
+        restricted_routes = {
+            "/collections": ("POST", "admin"),
+            "/collections/{collection_id}": ("PUT", "admin"),
+            "/collections/{collection_id}": ("DELETE", "admin"),
+            "/collections/{collection_id}/items": ("POST", "admin"),
+            "/collections/{collection_id}/items/{item_id}": ("PUT", "admin"),
+            "/collections/{collection_id}/items/{item_id}": ("DELETE", "admin"),
+        }
+        for collection_id, scope in collection_scopes.items():
+            route = f"/collections/{collection_id}"
+            restricted_routes[route] = ("GET", scope)
+
+        api_routes = {
+            route.path: route for route in api.app.routes if isinstance(route, APIRoute)
+        }
+        for endpoint, (method, scope) in restricted_routes.items():
+            route = api_routes.get(endpoint)
+            if route and method in route.methods:
+                required_token_scopes = None
+                if scope:
+                    required_token_scopes = [scope]
+                oidc_auth.apply_auth_dependencies(route, required_token_scopes=required_token_scopes)
 
     yield
 
@@ -195,6 +222,29 @@ app = api.app
 add_timeout(app, settings.request_timeout)
 
 
+async def fetch_all_collections_raw() -> Collections:
+    request = Request({"type": "http", "app": app})
+    async def _fetch() -> Collections:
+
+        async with app.state.get_connection(request, "r") as conn:
+            q, p = render(
+                """
+                SELECT * FROM collection_search(:req::text::jsonb);
+                """,
+                req="{}",
+            )
+            collections_result: Collections = await conn.fetchval(q, *p)
+            return collections_result
+
+    cache_key = f"{CACHE_KEY_COLLECTIONS}_all"
+    settings: Settings = app.state.settings
+
+    if settings.redis_enabled:
+        from eoapi.stac.redis import cached_result
+        return await cached_result(_fetch, cache_key, request)
+    return await _fetch()
+
+
 @app.get("/index.html", response_class=HTMLResponse)
 async def viewer_page(request: Request):
     """Search viewer."""
@@ -207,14 +257,6 @@ async def viewer_page(request: Request):
         media_type="text/html",
     )
 
-
-if auth_settings.openid_configuration_url:
-    oidc_auth = OpenIdConnectAuth.from_settings(auth_settings)
-
-    restricted_prefixes = ["/collections", "/search"]
-    for route in app.routes:
-        if any(route.path.startswith(f"{app.root_path}{prefix}") for prefix in restricted_prefixes):
-            oidc_auth.apply_auth_dependencies(route, required_token_scopes=[])
 
 
 def run() -> None:
