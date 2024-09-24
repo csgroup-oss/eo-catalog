@@ -23,7 +23,7 @@
 # SOFTWARE.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Optional
 from urllib.parse import urlparse
 
 from eoapi.stac.constants import X_FORWARDED_FOR, X_ORIGINAL_FORWARDED_FOR
@@ -32,6 +32,7 @@ from stac_fastapi.types.stac import Collections
 if TYPE_CHECKING:
     from fastapi import Request
 
+collections_list = Collections()
 
 def request_to_path(request: Request) -> str:
     parsed_url = urlparse(f"{request.url}")
@@ -46,11 +47,17 @@ def get_request_ip(request: Request) -> str:
     # If multiple IPs, take the last one
     return ip_header.split(",")[-1] if ip_header else ""
 
-def get_scopes_for_collections(collections: Collections) -> Dict[str, str]:
+class CollectionsScopes:
+
     collection_scopes = {}
-    for collection in collections["collections"]:
-        if "scope" in collection:
-            collection_scopes[collection["id"]] = collection["scope"]
-        else:
-            collection_scopes[collection["id"]] = None
-    return collection_scopes
+
+    def __init__(self, collections: Collections):
+        self.collections = collections
+
+    def set_scopes_for_collections(self):
+        scopes = {}
+        for collection in self.collections["collections"]:
+            if "scope" in collection:
+                scopes[collection["id"]] = collection["scope"]
+        CollectionsScopes.collection_scopes = scopes
+        print(CollectionsScopes.collection_scopes)

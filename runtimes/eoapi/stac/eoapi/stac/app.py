@@ -27,16 +27,14 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from buildpg import render
 from eoapi.auth_utils import OpenIdConnectAuth
 from eoapi.stac.config import Settings
-from eoapi.stac.constants import CACHE_KEY_COLLECTIONS
 from eoapi.stac.core import EOCClient
 from eoapi.stac.extensions.filter import FiltersClient
 from eoapi.stac.extensions.titiller import TiTilerExtension
 from eoapi.stac.logs import init_logging
 from eoapi.stac.middlewares.timeout import add_timeout
-from eoapi.stac.utils import get_scopes_for_collections
+from eoapi.stac.utils import CollectionsScopes
 from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute
@@ -60,9 +58,8 @@ from stac_fastapi.extensions.core import (
 from stac_fastapi.extensions.third_party import BulkTransactionExtension
 from stac_fastapi.pgstac.db import close_db_connection, connect_to_db
 from stac_fastapi.pgstac.extensions import QueryExtension
-from stac_fastapi.pgstac.transactions import BulkTransactionsClient, TransactionsClient
+from stac_fastapi.pgstac.transactions import BulkTransactionsClient
 from stac_fastapi.pgstac.types.search import PgstacSearch
-from stac_fastapi.types.stac import Collections
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -71,6 +68,7 @@ from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
 from auth import EoApiOpenIdConnectSettings, oidc_auth_from_settings
+from extensions.transaction import EoApiTransactionsClient, fetch_all_collections_raw
 
 try:
     from importlib.resources import files as resources_files  # type: ignore
@@ -78,7 +76,8 @@ except ImportError:
     # Try backported to PY<39 `importlib_resources`.
     from importlib_resources import files as resources_files  # type: ignore
 
-templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))
+#templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))
+templates = Jinja2Templates(directory="templates")
 auth_settings = EoApiOpenIdConnectSettings()
 settings = Settings(enable_response_models=True)
 
@@ -89,7 +88,7 @@ logger = logging.getLogger(__name__)
 # Extensions
 extensions_map = {
     "transaction": TransactionExtension(
-        client=TransactionsClient(),
+        client=EoApiTransactionsClient(),
         settings=settings,
         response_class=ORJSONResponse,
     ),
@@ -128,33 +127,39 @@ async def lifespan(app: FastAPI):
 
         await connect_to_redis(app)
 
+    # add restrictions to endpoints
     if auth_settings.openid_configuration_url:
-        collections = await fetch_all_collections_raw()
-        collection_scopes = get_scopes_for_collections(collections)
+        logger.debug("Add access restrictions to endpoints")
+        # get scopes for collections
+        request = Request({"type": "http", "app": app})
+        collections = await fetch_all_collections_raw(request)
+        CollectionsScopes(collections).set_scopes_for_collections()
         oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
-
+        # basic restricted routes
         restricted_routes = {
-            "/collections": ("POST", "admin"),
-            "/collections/{collection_id}": ("PUT", "admin"),
-            "/collections/{collection_id}": ("DELETE", "admin"),
-            "/collections/{collection_id}/items": ("POST", "admin"),
-            "/collections/{collection_id}/items/{item_id}": ("PUT", "admin"),
-            "/collections/{collection_id}/items/{item_id}": ("DELETE", "admin"),
+            "/collections": ("POST", "admin", "/collections"),
+            #"/collections/{collection_id}": ("PUT", "admin", "/collections/{collection_id}"),
+            "/collections/{collection_id}": ("DELETE", "admin", "/collections/{collection_id}"),
+            "/collections/{collection_id}/items": ("POST", "admin", "/collections/{collection_id}/items"),
+            "/collections/{collection_id}/items/{item_id}": ("PUT", "admin", "/collections/{collection_id}/items/{item_id}"),
+            "/collections/{collection_id}/items/{item_id}": ("DELETE", "admin", "/collections/{collection_id}/items/{item_id}"),
         }
-        for collection_id, scope in collection_scopes.items():
-            route = f"/collections/{collection_id}"
-            restricted_routes[route] = ("GET", scope)
-
-        api_routes = {
-            route.path: route for route in api.app.routes if isinstance(route, APIRoute)
-        }
-        for endpoint, (method, scope) in restricted_routes.items():
-            route = api_routes.get(endpoint)
-            if route and method in route.methods:
-                required_token_scopes = None
+        api_routes = {}
+        for route in api.app.routes:
+            if isinstance(route, APIRoute):
+                if route.path in api_routes:
+                    api_routes[route.path].append(route)
+                else:
+                    api_routes[route.path] = [route]
+        for endpoint, (method, scope, alias) in restricted_routes.items():
+            routes = api_routes.get(endpoint)
+            if not routes:
+                continue
+            for route in routes:
+                if method not in route.methods:
+                    continue
                 if scope:
-                    required_token_scopes = [scope]
-                oidc_auth.apply_auth_dependencies(route, required_token_scopes=required_token_scopes)
+                    oidc_auth.apply_auth_dependencies(route, required_token_scopes=[scope])
 
     yield
 
@@ -222,29 +227,6 @@ app = api.app
 add_timeout(app, settings.request_timeout)
 
 
-async def fetch_all_collections_raw() -> Collections:
-    request = Request({"type": "http", "app": app})
-    async def _fetch() -> Collections:
-
-        async with app.state.get_connection(request, "r") as conn:
-            q, p = render(
-                """
-                SELECT * FROM collection_search(:req::text::jsonb);
-                """,
-                req="{}",
-            )
-            collections_result: Collections = await conn.fetchval(q, *p)
-            return collections_result
-
-    cache_key = f"{CACHE_KEY_COLLECTIONS}_all"
-    settings: Settings = app.state.settings
-
-    if settings.redis_enabled:
-        from eoapi.stac.redis import cached_result
-        return await cached_result(_fetch, cache_key, request)
-    return await _fetch()
-
-
 @app.get("/index.html", response_class=HTMLResponse)
 async def viewer_page(request: Request):
     """Search viewer."""
@@ -256,7 +238,6 @@ async def viewer_page(request: Request):
         },
         media_type="text/html",
     )
-
 
 
 def run() -> None:

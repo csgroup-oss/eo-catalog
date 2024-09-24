@@ -31,6 +31,9 @@ import attr
 import orjson
 from asyncpg import InvalidDatetimeFormatError
 from buildpg import render
+from eoapi.auth_utils import OpenIdConnectAuth
+from eoapi.stac.auth import EoApiOpenIdConnectSettings, oidc_auth_from_settings
+from eoapi.stac.utils import CollectionsScopes
 from fastapi import HTTPException, Request
 from pydantic import ValidationError
 from pygeofilter.backends.cql2_json import to_cql2
@@ -63,6 +66,8 @@ from eoapi.stac.constants import (
 )
 from eoapi.stac.logs import get_custom_dimensions
 
+from eoapi.stac.auth import get_user_scopes_from_request
+
 # from eo_catalog.stac.utils.text_filter import apply_text_filter
 
 logger = logging.getLogger(__name__)
@@ -73,6 +78,8 @@ class EOCClient(CoreCrudClient):
     """Client for core endpoints defined by stac."""
 
     extra_conformance_classes: List[str] = attr.ib(factory=list)
+    auth_settings = EoApiOpenIdConnectSettings()
+    oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
 
     async def landing_page(self, **kwargs: Any) -> LandingPage:
         """
@@ -232,6 +239,12 @@ class EOCClient(CoreCrudClient):
         Override from stac-fastapi-pgstac to cache result.
         """
         _super: CoreCrudClient = super()
+        scopes = get_user_scopes_from_request(request, EOCClient.oidc_auth)
+        collection_scopes = CollectionsScopes.collection_scopes
+        if collection_id in collection_scopes:
+            required_scope = collection_scopes[collection_id]
+            if not required_scope in scopes:
+                raise HTTPException(status_code=403, detail=f"Access to collection {collection_id} not allowed")
 
         async def _fetch() -> Collection:
             return await _super.get_collection(collection_id, request=request)
