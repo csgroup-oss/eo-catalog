@@ -51,8 +51,16 @@ def get_request_ip(request: Request) -> str:
     return ip_header.split(",")[-1] if ip_header else ""
 
 
-async def fetch_all_collections_raw(request: Request) -> Collections:
+async def fetch_all_collections_with_scopes(request: Request) -> Collections:
+    """
+    fetches the ids and scopes of all collections from the database or the redis cache (if enabled)
+    updates the redis cache (if enabled) if the data was fetched from the database
+    Args:
+        request: starlette request
 
+    Returns: a Collections object containing all collection ids and scopes
+
+    """
     async def _fetch() -> Collections:
         search_request = {
             "fields": {"include": ["id", "scope"]},

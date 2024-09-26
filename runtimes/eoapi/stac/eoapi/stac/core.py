@@ -208,12 +208,13 @@ class EOCClient(CoreCrudClient):
         Override from stac-fastapi-pgstac to cache result and support collection-search.
         Can be simplified once https://github.com/stac-utils/stac-fastapi-pgstac/pull/136 is merged.
         """
+        # filter ids depending on the user scope
         collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
         if not ids:
             ids = collections_with_scopes
         else:
             ids = list(set(collections_with_scopes) & set(ids))
-        # Parse request parameters
+        # don't return the scope of the collection
         if not fields:
             fields = []
         fields.append("-scope")

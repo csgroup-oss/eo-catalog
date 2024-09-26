@@ -35,7 +35,7 @@ from eoapi.stac.extensions.filter import FiltersClient
 from eoapi.stac.extensions.titiller import TiTilerExtension
 from eoapi.stac.logs import init_logging
 from eoapi.stac.middlewares.timeout import add_timeout
-from eoapi.stac.utils import fetch_all_collections_raw
+from eoapi.stac.utils import fetch_all_collections_with_scopes
 from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute
@@ -216,7 +216,7 @@ async def lock_transaction_endpoints():
 
     # get scopes for collections
     request = Request({"type": "http", "app": app})
-    collections = await fetch_all_collections_raw(request)
+    collections = await fetch_all_collections_with_scopes(request)
     CollectionsScopes(collections, settings.eoapi_auth_metadata_field)
     oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
     # basic restricted routes

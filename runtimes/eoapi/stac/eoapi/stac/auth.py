@@ -35,6 +35,10 @@ class CollectionsScopes:
         self.set_scopes_for_collections()
 
     def set_scopes_for_collections(self):
+        """
+        fills the class variable collection_scopes with the scopes given in self.collections using the variable self.scope_var
+        to find the scope in the collection metadata
+        """
         scopes = {}
         for collection in self.collections["collections"]:
             if self.scope_var in collection:
@@ -45,10 +49,31 @@ class CollectionsScopes:
 
 
 def oidc_auth_from_settings(cls, settings: EoApiOpenIdConnectSettings) -> OpenIdConnectAuth:
+    """
+    creates an OpenIdConnectAuth object from the given settings
+    Args:
+        cls: class of the auth object to be created
+        settings: open id connect settings to be used
+
+    Returns:
+        OpenIdConnectAuth object
+    """
     return OpenIdConnectAuth(**settings.model_dump(include=cls.__dataclass_fields__.keys()))
 
 
 def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth) -> List[str]:
+    """
+    retrieves the scopes of the user based on the given request
+    Args:
+        request: the scopes will be retrieved from the token in the headers of the starlette request
+        oidc_auth: authentication object from which the signing key and the allowed audiences are retrieved
+
+    Returns:
+        List of the user scopes
+
+    Raises:
+        HTTPException if the token cannot be decoded or is invalid
+    """
     if not "Authorization" in request.headers:
         return []
     token = request.headers["Authorization"].replace("Bearer ", "")
@@ -71,6 +96,15 @@ def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth)
 
 
 def verify_scope_for_collection(request: Request, collection_id: str, oidc_auth: OpenIdConnectAuth):
+    """
+    checks if the user scopes from the request contain the scope necessary to access the collection with the given id
+    Args:
+        request: the scopes will be retrieved from the token in the headers of the starlette request
+        collection_id: id of the collection for which the scope should be checked
+        oidc_auth: authentication object from which the signing key and the allowed audiences are retrieved
+    Raises:
+        HTTPException if the token in the request header does not contain the necessary scope
+    """
     scopes = get_user_scopes_from_request(request, oidc_auth)
     collection_scopes = CollectionsScopes.collection_scopes
     if collection_id in collection_scopes and collection_scopes[collection_id]:
@@ -80,6 +114,15 @@ def verify_scope_for_collection(request: Request, collection_id: str, oidc_auth:
 
 
 def get_collections_for_user_scope(request: Request, oidc_auth: OpenIdConnectAuth) -> List[str]:
+    """
+    returns the collections which can be accessed with the user scopes from the authorization token of the given request
+    Args:
+        request: the scopes will be retrieved from the token in the headers of the starlette request
+        oidc_auth: authentication object from which the signing key and the allowed audiences are retrieved
+
+    Returns:
+        a list of the ids of the collections the user is allowed to access
+    """
     scopes = get_user_scopes_from_request(request, oidc_auth)
     collection_scopes = CollectionsScopes.collection_scopes
     collections_with_scope = []
