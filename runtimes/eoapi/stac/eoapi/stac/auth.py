@@ -4,7 +4,7 @@ import jwt
 from eoapi.auth_utils import OpenIdConnectAuth
 from fastapi import HTTPException
 from pydantic import AnyHttpUrl
-from pydantic_settings import BaseSettings  # type:ignore
+from pydantic_settings import BaseSettings
 from stac_fastapi.types.stac import Collections
 from starlette import status
 from starlette.requests import Request
@@ -29,19 +29,19 @@ class CollectionsScopes:
 
     collection_scopes = {}
 
-    def __init__(self, collections: Collections):
+    def __init__(self, collections: Collections, scope_var: str):
         self.collections = collections
+        self.scope_var = scope_var
         self.set_scopes_for_collections()
 
     def set_scopes_for_collections(self):
         scopes = {}
         for collection in self.collections["collections"]:
-            if "scope" in collection:
-                scopes[collection["id"]] = collection["scope"]
+            if self.scope_var in collection:
+                scopes[collection["id"]] = collection[self.scope_var]
             else:
                 scopes[collection["id"]] = None
         CollectionsScopes.collection_scopes = scopes
-        print(CollectionsScopes.collection_scopes)
 
 
 def oidc_auth_from_settings(cls, settings: EoApiOpenIdConnectSettings) -> OpenIdConnectAuth:

@@ -56,7 +56,7 @@ async def fetch_all_collections_raw(request: Request) -> Collections:
     async def _fetch() -> Collections:
         search_request = {
             "fields": {"include": ["id", "scope"]},
-            "limit": None
+            "limit": 100000
         }
         async with request.app.state.get_connection(request, "r") as conn:
             q, p = render(
@@ -66,7 +66,6 @@ async def fetch_all_collections_raw(request: Request) -> Collections:
                 req=json.dumps(search_request),
             )
             collections_result: Collections = await conn.fetchval(q, *p)
-            print(collections_result)
             return collections_result
 
     cache_key = f"{CACHE_KEY_COLLECTIONS}_all"

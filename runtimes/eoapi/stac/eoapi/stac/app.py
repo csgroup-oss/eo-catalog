@@ -108,6 +108,7 @@ if enabled_extensions := settings.stac_extensions:
 else:
     extensions = [k[v] for k, v in extensions_map.items() if v]
 
+
 if not (enabled_extensions := settings.stac_extensions) or "collection_search" in enabled_extensions:
     extension = CollectionSearchExtension.from_extensions(extensions)
     extensions.append(extension)
@@ -216,18 +217,19 @@ async def lock_transaction_endpoints():
     # get scopes for collections
     request = Request({"type": "http", "app": app})
     collections = await fetch_all_collections_raw(request)
-    CollectionsScopes(collections)
+    CollectionsScopes(collections, settings.eoapi_auth_metadata_field)
     oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
     # basic restricted routes
+    admin_scope = settings.eoapi_auth_update_scope
     restricted_routes = {
-        "/collections": ("POST", "admin", "/collections"),
-        # "/collections/{collection_id}": ("PUT", "admin", "/collections/{collection_id}"),
-        "/collections/{collection_id}": ("DELETE", "admin", "/collections/{collection_id}"),
-        "/collections/{collection_id}/items": ("POST", "admin", "/collections/{collection_id}/items"),
+        "/collections": ("POST", admin_scope, "/collections"),
+        "/collections/{collection_id}": ("PUT", admin_scope, "/collections/{collection_id}"),
+        "/collections/{collection_id}": ("DELETE", admin_scope, "/collections/{collection_id}"),
+        "/collections/{collection_id}/items": ("POST", admin_scope, "/collections/{collection_id}/items"),
         "/collections/{collection_id}/items/{item_id}": (
-        "PUT", "admin", "/collections/{collection_id}/items/{item_id}"),
+        "PUT", admin_scope, "/collections/{collection_id}/items/{item_id}"),
         "/collections/{collection_id}/items/{item_id}": (
-        "DELETE", "admin", "/collections/{collection_id}/items/{item_id}"),
+        "DELETE", admin_scope, "/collections/{collection_id}/items/{item_id}"),
     }
     api_routes = {}
     for route in app.routes:

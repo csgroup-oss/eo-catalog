@@ -113,7 +113,6 @@ class EOCClient(CoreCrudClient):
         async def _fetch() -> Collections:
             base_url = get_base_url(request)
             search_request_json = search_request.model_dump_json(exclude_none=True, by_alias=True)
-            print(search_request_json)
 
             try:
                 async with request.app.state.get_connection(request, "r") as conn:
@@ -235,7 +234,6 @@ class EOCClient(CoreCrudClient):
             filter=filter,
             filter_lang=filter_lang,
         )
-        print(clean)
 
         # Do the request
         try:
@@ -270,13 +268,11 @@ class EOCClient(CoreCrudClient):
         Override from stac-fastapi-pgstac to cache results and add telemetry.
         """
         _super: CoreCrudClient = super()
-        print(search_request)
         collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
         if not search_request.collections:
             search_request.collections = collections_with_scopes
         else:
             search_request.collections = list(set(collections_with_scopes) & set(search_request.collections))
-        print(search_request)
 
         async def _fetch() -> ItemCollection:
             result = await _super._search_base(search_request, request=request)

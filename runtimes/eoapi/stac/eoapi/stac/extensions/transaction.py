@@ -19,7 +19,7 @@ async def _update_collection_scopes(request: Request):
         r = request.app.state.redis
         r.delete(f"{CACHE_KEY_COLLECTIONS}_all")
     collections = await fetch_all_collections_raw(request)
-    CollectionsScopes(collections).set_scopes_for_collections()
+    CollectionsScopes(collections, settings.eoapi_auth_metadata_field).set_scopes_for_collections()
 
 
 class EoApiTransactionsClient(TransactionsClient):
