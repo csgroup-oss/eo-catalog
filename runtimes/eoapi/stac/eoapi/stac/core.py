@@ -32,8 +32,22 @@ import orjson
 from asyncpg import InvalidDatetimeFormatError
 from buildpg import render
 from eoapi.auth_utils import OpenIdConnectAuth
-from eoapi.stac.auth import EoApiOpenIdConnectSettings, oidc_auth_from_settings
-from eoapi.stac.utils import CollectionsScopes
+from eoapi.stac.auth import (
+    EoApiOpenIdConnectSettings,
+    oidc_auth_from_settings,
+    get_collections_for_user_scope,
+    verify_scope_for_collection
+)
+from eoapi.stac.config import Settings
+from eoapi.stac.constants import (
+    CACHE_KEY_COLLECTION,
+    CACHE_KEY_COLLECTIONS,
+    CACHE_KEY_ITEM,
+    CACHE_KEY_ITEMS,
+    CACHE_KEY_LANDING,
+    CACHE_KEY_SEARCH,
+)
+from eoapi.stac.logs import get_custom_dimensions
 from fastapi import HTTPException, Request
 from pydantic import ValidationError
 from pygeofilter.backends.cql2_json import to_cql2
@@ -54,19 +68,6 @@ from stac_fastapi.types.stac import (
     LandingPage,
 )
 from stac_pydantic.shared import BBox, MimeTypes
-
-from eoapi.stac.config import Settings
-from eoapi.stac.constants import (
-    CACHE_KEY_COLLECTION,
-    CACHE_KEY_COLLECTIONS,
-    CACHE_KEY_ITEM,
-    CACHE_KEY_ITEMS,
-    CACHE_KEY_LANDING,
-    CACHE_KEY_SEARCH,
-)
-from eoapi.stac.logs import get_custom_dimensions
-
-from eoapi.stac.auth import get_user_scopes_from_request
 
 # from eo_catalog.stac.utils.text_filter import apply_text_filter
 
@@ -112,6 +113,7 @@ class EOCClient(CoreCrudClient):
         async def _fetch() -> Collections:
             base_url = get_base_url(request)
             search_request_json = search_request.model_dump_json(exclude_none=True, by_alias=True)
+            print(search_request_json)
 
             try:
                 async with request.app.state.get_connection(request, "r") as conn:
@@ -207,14 +209,22 @@ class EOCClient(CoreCrudClient):
         Override from stac-fastapi-pgstac to cache result and support collection-search.
         Can be simplified once https://github.com/stac-utils/stac-fastapi-pgstac/pull/136 is merged.
         """
+        collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
+        if not ids:
+            ids = collections_with_scopes
+        else:
+            ids = list(set(collections_with_scopes) & set(ids))
         # Parse request parameters
+        if not fields:
+            fields = []
+        fields.append("-scope")
         base_args = {
             "ids": ids,
             "bbox": bbox,
             "limit": limit,
             "token": token,
             "query": orjson.loads(unquote_plus(query)) if query else query,
-            "q": q,
+            "q": q
         }
 
         clean = clean_search_args(
@@ -225,6 +235,7 @@ class EOCClient(CoreCrudClient):
             filter=filter,
             filter_lang=filter_lang,
         )
+        print(clean)
 
         # Do the request
         try:
@@ -238,19 +249,16 @@ class EOCClient(CoreCrudClient):
         """
         Override from stac-fastapi-pgstac to cache result.
         """
+        verify_scope_for_collection(request, collection_id, EOCClient.oidc_auth)
         _super: CoreCrudClient = super()
-        scopes = get_user_scopes_from_request(request, EOCClient.oidc_auth)
-        collection_scopes = CollectionsScopes.collection_scopes
-        if collection_id in collection_scopes:
-            required_scope = collection_scopes[collection_id]
-            if not required_scope in scopes:
-                raise HTTPException(status_code=403, detail=f"Access to collection {collection_id} not allowed")
 
         async def _fetch() -> Collection:
             return await _super.get_collection(collection_id, request=request)
 
         cache_key = f"{CACHE_KEY_COLLECTION}:{collection_id}"
-        return await cached_result(_fetch, cache_key, request)
+        result = await cached_result(_fetch, cache_key, request)
+        result.pop("scope", None)
+        return result
 
     async def _search_base(
         self,
@@ -262,6 +270,13 @@ class EOCClient(CoreCrudClient):
         Override from stac-fastapi-pgstac to cache results and add telemetry.
         """
         _super: CoreCrudClient = super()
+        print(search_request)
+        collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
+        if not search_request.collections:
+            search_request.collections = collections_with_scopes
+        else:
+            search_request.collections = list(set(collections_with_scopes) & set(search_request.collections))
+        print(search_request)
 
         async def _fetch() -> ItemCollection:
             result = await _super._search_base(search_request, request=request)
@@ -306,6 +321,7 @@ class EOCClient(CoreCrudClient):
         """
         Override from stac-fastapi-pgstac to cache result.
         """
+        verify_scope_for_collection(request, collection_id, EOCClient.oidc_auth)
         _super: CoreCrudClient = super()
 
         async def _fetch() -> ItemCollection:
@@ -325,6 +341,7 @@ class EOCClient(CoreCrudClient):
         """
         Override from stac-fastapi-pgstac to cache result.
         """
+        verify_scope_for_collection(request, collection_id, EOCClient.oidc_auth)
         _super: CoreCrudClient = super()
 
         async def _fetch() -> Item:

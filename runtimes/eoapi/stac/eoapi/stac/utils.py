@@ -23,10 +23,13 @@
 # SOFTWARE.
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Dict, Optional
 from urllib.parse import urlparse
 
-from eoapi.stac.constants import X_FORWARDED_FOR, X_ORIGINAL_FORWARDED_FOR
+from buildpg import render
+from eoapi.stac.config import Settings
+from eoapi.stac.constants import X_FORWARDED_FOR, X_ORIGINAL_FORWARDED_FOR, CACHE_KEY_COLLECTIONS
 from stac_fastapi.types.stac import Collections
 
 if TYPE_CHECKING:
@@ -47,17 +50,29 @@ def get_request_ip(request: Request) -> str:
     # If multiple IPs, take the last one
     return ip_header.split(",")[-1] if ip_header else ""
 
-class CollectionsScopes:
 
-    collection_scopes = {}
+async def fetch_all_collections_raw(request: Request) -> Collections:
 
-    def __init__(self, collections: Collections):
-        self.collections = collections
+    async def _fetch() -> Collections:
+        search_request = {
+            "fields": {"include": ["id", "scope"]},
+            "limit": None
+        }
+        async with request.app.state.get_connection(request, "r") as conn:
+            q, p = render(
+                """
+                SELECT * FROM collection_search(:req::text::jsonb);
+                """,
+                req=json.dumps(search_request),
+            )
+            collections_result: Collections = await conn.fetchval(q, *p)
+            print(collections_result)
+            return collections_result
 
-    def set_scopes_for_collections(self):
-        scopes = {}
-        for collection in self.collections["collections"]:
-            if "scope" in collection:
-                scopes[collection["id"]] = collection["scope"]
-        CollectionsScopes.collection_scopes = scopes
-        print(CollectionsScopes.collection_scopes)
+    cache_key = f"{CACHE_KEY_COLLECTIONS}_all"
+    settings: Settings = request.app.state.settings
+
+    if settings.redis_enabled:
+        from eoapi.stac.redis import cached_result
+        return await cached_result(_fetch, cache_key, request)
+    return await _fetch()

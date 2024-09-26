@@ -28,13 +28,14 @@ import os
 from contextlib import asynccontextmanager
 
 from eoapi.auth_utils import OpenIdConnectAuth
+from eoapi.stac.auth import CollectionsScopes, oidc_auth_from_settings
 from eoapi.stac.config import Settings
 from eoapi.stac.core import EOCClient
 from eoapi.stac.extensions.filter import FiltersClient
 from eoapi.stac.extensions.titiller import TiTilerExtension
 from eoapi.stac.logs import init_logging
 from eoapi.stac.middlewares.timeout import add_timeout
-from eoapi.stac.utils import CollectionsScopes
+from eoapi.stac.utils import fetch_all_collections_raw
 from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute
@@ -67,8 +68,8 @@ from starlette.responses import HTMLResponse
 from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
-from auth import EoApiOpenIdConnectSettings, oidc_auth_from_settings
-from extensions.transaction import EoApiTransactionsClient, fetch_all_collections_raw
+from auth import EoApiOpenIdConnectSettings
+from extensions.transaction import EoApiTransactionsClient
 
 try:
     from importlib.resources import files as resources_files  # type: ignore
@@ -129,38 +130,8 @@ async def lifespan(app: FastAPI):
 
     # add restrictions to endpoints
     if auth_settings.openid_configuration_url:
-        logger.debug("Add access restrictions to endpoints")
-        # get scopes for collections
-        request = Request({"type": "http", "app": app})
-        collections = await fetch_all_collections_raw(request)
-        CollectionsScopes(collections).set_scopes_for_collections()
-        oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
-        # basic restricted routes
-        restricted_routes = {
-            "/collections": ("POST", "admin", "/collections"),
-            #"/collections/{collection_id}": ("PUT", "admin", "/collections/{collection_id}"),
-            "/collections/{collection_id}": ("DELETE", "admin", "/collections/{collection_id}"),
-            "/collections/{collection_id}/items": ("POST", "admin", "/collections/{collection_id}/items"),
-            "/collections/{collection_id}/items/{item_id}": ("PUT", "admin", "/collections/{collection_id}/items/{item_id}"),
-            "/collections/{collection_id}/items/{item_id}": ("DELETE", "admin", "/collections/{collection_id}/items/{item_id}"),
-        }
-        api_routes = {}
-        for route in api.app.routes:
-            if isinstance(route, APIRoute):
-                if route.path in api_routes:
-                    api_routes[route.path].append(route)
-                else:
-                    api_routes[route.path] = [route]
-        for endpoint, (method, scope, alias) in restricted_routes.items():
-            routes = api_routes.get(endpoint)
-            if not routes:
-                continue
-            for route in routes:
-                if method not in route.methods:
-                    continue
-                if scope:
-                    oidc_auth.apply_auth_dependencies(route, required_token_scopes=[scope])
-
+        logger.debug("Add access restrictions to transaction endpoints")
+        await lock_transaction_endpoints()
     yield
 
     logger.debug("Closing db connections...")
@@ -238,6 +209,42 @@ async def viewer_page(request: Request):
         },
         media_type="text/html",
     )
+
+
+async def lock_transaction_endpoints():
+
+    # get scopes for collections
+    request = Request({"type": "http", "app": app})
+    collections = await fetch_all_collections_raw(request)
+    CollectionsScopes(collections)
+    oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
+    # basic restricted routes
+    restricted_routes = {
+        "/collections": ("POST", "admin", "/collections"),
+        # "/collections/{collection_id}": ("PUT", "admin", "/collections/{collection_id}"),
+        "/collections/{collection_id}": ("DELETE", "admin", "/collections/{collection_id}"),
+        "/collections/{collection_id}/items": ("POST", "admin", "/collections/{collection_id}/items"),
+        "/collections/{collection_id}/items/{item_id}": (
+        "PUT", "admin", "/collections/{collection_id}/items/{item_id}"),
+        "/collections/{collection_id}/items/{item_id}": (
+        "DELETE", "admin", "/collections/{collection_id}/items/{item_id}"),
+    }
+    api_routes = {}
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            if route.path in api_routes:
+                api_routes[route.path].append(route)
+            else:
+                api_routes[route.path] = [route]
+    for endpoint, (method, scope, alias) in restricted_routes.items():
+        routes = api_routes.get(endpoint)
+        if not routes:
+            continue
+        for route in routes:
+            if method not in route.methods:
+                continue
+            if scope:
+                oidc_auth.apply_auth_dependencies(route, required_token_scopes=[scope])
 
 
 def run() -> None:
