@@ -54,7 +54,7 @@ from stac_fastapi.extensions.core import (
     FreeTextAdvancedExtension,
     SortExtension,
     TokenPaginationExtension,
-    TransactionExtension, CollectionSearchExtension,
+    TransactionExtension,
 )
 from stac_fastapi.extensions.third_party import BulkTransactionExtension
 from stac_fastapi.pgstac.db import close_db_connection, connect_to_db
@@ -70,6 +70,7 @@ from starlette_cramjam.middleware import CompressionMiddleware
 
 from auth import EoApiOpenIdConnectSettings
 from extensions.transaction import EoApiTransactionsClient
+from eoapi.stac.extensions.collection_search import CollectionSearchExtensionWithIds
 
 try:
     from importlib.resources import files as resources_files  # type: ignore
@@ -77,8 +78,7 @@ except ImportError:
     # Try backported to PY<39 `importlib_resources`.
     from importlib_resources import files as resources_files  # type: ignore
 
-#templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))
 auth_settings = EoApiOpenIdConnectSettings()
 settings = Settings(enable_response_models=True)
 
@@ -110,7 +110,7 @@ else:
 
 
 if not (enabled_extensions := settings.stac_extensions) or "collection_search" in enabled_extensions:
-    extension = CollectionSearchExtension.from_extensions(extensions)
+    extension = CollectionSearchExtensionWithIds.from_extensions(extensions)
     extensions.append(extension)
     collections_get_request_model = extension.GET
 else:
@@ -168,7 +168,7 @@ if any(isinstance(ext, TokenPaginationExtension) for ext in extensions):
         request_type="GET",
     )
 
-itemsearch_exts = [ext for ext in extensions if ext.__class__.__name__ != "CollectionSearchExtension"]
+itemsearch_exts = [ext for ext in extensions if ext.__class__.__name__ != "CollectionSearchExtensionWithIds"]
 search_get_model = create_get_request_model(itemsearch_exts)
 search_post_model = create_post_request_model(itemsearch_exts, base_model=PgstacSearch)
 

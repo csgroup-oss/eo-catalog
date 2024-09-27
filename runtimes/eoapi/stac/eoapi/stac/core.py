@@ -129,13 +129,14 @@ class EOCClient(CoreCrudClient):
             next: Optional[str] = None
             prev: Optional[str] = None
 
-            if links := collections_result.get("links"):
-                for link in links:
-                    if link.get("rel") == "prev":
-                        prev = link
-                    elif link.get("rel") == "next":
-                        next = link
-                links = [link for link in links if link.get("rel") not in ["prev", "next"]]
+            # commented for the moment because the pagination is not working for collection search
+            # if links := collections_result.get("links"):
+            #     for link in links:
+            #         if link.get("rel") == "prev":
+            #             prev = link
+            #         elif link.get("rel") == "next":
+            #             next = link
+            #     links = [link for link in links if link.get("rel") not in ["prev", "next"]]
 
             linked_collections: List[Collection] = []
             collections = collections_result["collections"]
