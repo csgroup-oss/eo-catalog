@@ -27,16 +27,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from eoapi.auth_utils import OpenIdConnectAuth
-from eoapi.stac.auth import CollectionsScopes, oidc_auth_from_settings
-from eoapi.stac.config import Settings
-from eoapi.stac.core import EOCClient
-from eoapi.stac.extensions.filter import FiltersClient
-from eoapi.stac.extensions.titiller import TiTilerExtension
-from eoapi.stac.logs import init_logging
-from eoapi.stac.middlewares.timeout import add_timeout
-from eoapi.stac.utils import fetch_all_collections_with_scopes
-from fastapi import FastAPI
+from auth import EoApiOpenIdConnectSettings
+from extensions.transaction import EoApiTransactionsClient
+from fastapi import Depends, FastAPI
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute
 from stac_fastapi.api.app import StacApi
@@ -68,9 +61,16 @@ from starlette.responses import HTMLResponse
 from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
-from auth import EoApiOpenIdConnectSettings
-from extensions.transaction import EoApiTransactionsClient
+from eoapi.auth_utils import OpenIdConnectAuth
+from eoapi.stac.auth import CollectionsScopes, oidc_auth_from_settings, verify_scope_for_collection
+from eoapi.stac.config import Settings
+from eoapi.stac.core import EOCClient
 from eoapi.stac.extensions.collection_search import CollectionSearchExtensionWithIds
+from eoapi.stac.extensions.filter import FiltersClient
+from eoapi.stac.extensions.titiller import TiTilerExtension
+from eoapi.stac.logs import init_logging
+from eoapi.stac.middlewares.timeout import add_timeout
+from eoapi.stac.utils import fetch_all_collections_with_scopes
 
 try:
     from importlib.resources import files as resources_files  # type: ignore
@@ -183,6 +183,7 @@ api = StacApi(
             "usePkceWithAuthorizationCodeGrant": auth_settings.use_pkce,
         },
         root_path=settings.app_root_path,
+        dependencies=[Depends(verify_scope_for_collection)],
     ),
     settings=settings,
     extensions=extensions,
@@ -213,24 +214,22 @@ async def viewer_page(request: Request):
 
 
 async def lock_transaction_endpoints():
-
     # get scopes for collections
     request = Request({"type": "http", "app": app})
+    # get scopes for collections which will be used in dependencies
     collections = await fetch_all_collections_with_scopes(request)
     CollectionsScopes(collections, settings.eoapi_auth_metadata_field)
     oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
     # basic restricted routes
     admin_scope = settings.eoapi_auth_update_scope
-    restricted_routes = {
-        "/collections": ("POST", admin_scope, "/collections"),
-        "/collections/{collection_id}": ("PUT", admin_scope, "/collections/{collection_id}"),
-        "/collections/{collection_id}": ("DELETE", admin_scope, "/collections/{collection_id}"),
-        "/collections/{collection_id}/items": ("POST", admin_scope, "/collections/{collection_id}/items"),
-        "/collections/{collection_id}/items/{item_id}": (
-        "PUT", admin_scope, "/collections/{collection_id}/items/{item_id}"),
-        "/collections/{collection_id}/items/{item_id}": (
-        "DELETE", admin_scope, "/collections/{collection_id}/items/{item_id}"),
-    }
+    restricted_routes = [
+        ("POST", admin_scope, "/collections"),
+        ("PUT", admin_scope, "/collections/{collection_id}"),
+        ("DELETE", admin_scope, "/collections/{collection_id}"),
+        ("POST", admin_scope, "/collections/{collection_id}/items"),
+        ("PUT", admin_scope, "/collections/{collection_id}/items/{item_id}"),
+        ("DELETE", admin_scope, "/collections/{collection_id}/items/{item_id}"),
+    ]
     api_routes = {}
     for route in app.routes:
         if isinstance(route, APIRoute):
@@ -238,7 +237,7 @@ async def lock_transaction_endpoints():
                 api_routes[route.path].append(route)
             else:
                 api_routes[route.path] = [route]
-    for endpoint, (method, scope, alias) in restricted_routes.items():
+    for method, scope, endpoint in restricted_routes:
         routes = api_routes.get(endpoint)
         if not routes:
             continue

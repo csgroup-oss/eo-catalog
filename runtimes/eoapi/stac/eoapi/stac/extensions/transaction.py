@@ -1,9 +1,5 @@
 from typing import Optional, Union
 
-from eoapi.stac.config import Settings
-from eoapi.stac.constants import CACHE_KEY_COLLECTIONS
-from eoapi.stac.auth import CollectionsScopes
-from eoapi.stac.utils import fetch_all_collections_with_scopes
 from stac_fastapi.pgstac.db import dbfunc
 from stac_fastapi.pgstac.models.links import CollectionLinks
 from stac_fastapi.pgstac.transactions import TransactionsClient
@@ -11,6 +7,11 @@ from stac_fastapi.types import stac as stac_types
 from stac_pydantic import Collection
 from starlette.requests import Request
 from starlette.responses import Response
+
+from eoapi.stac.auth import CollectionsScopes
+from eoapi.stac.config import Settings
+from eoapi.stac.constants import CACHE_KEY_COLLECTIONS
+from eoapi.stac.utils import fetch_all_collections_with_scopes
 
 
 async def _update_collection_scopes(request: Request):
@@ -28,7 +29,6 @@ async def _update_collection_scopes(request: Request):
 
 
 class EoApiTransactionsClient(TransactionsClient):
-
     async def create_collection(
         self,
         collection: Collection,
@@ -45,9 +45,9 @@ class EoApiTransactionsClient(TransactionsClient):
         async with request.app.state.get_connection(request, "w") as conn:
             await dbfunc(conn, "create_collection", collection)
 
-        collection["links"] = await CollectionLinks(
-            collection_id=collection["id"], request=request
-        ).get_links(extra_links=collection["links"])
+        collection["links"] = await CollectionLinks(collection_id=collection["id"], request=request).get_links(
+            extra_links=collection["links"]
+        )
 
         await _update_collection_scopes(request)
 
@@ -68,11 +68,10 @@ class EoApiTransactionsClient(TransactionsClient):
         async with request.app.state.get_connection(request, "w") as conn:
             await dbfunc(conn, "update_collection", col)
 
-        col["links"] = await CollectionLinks(
-            collection_id=col["id"], request=request
-        ).get_links(extra_links=col.get("links"))
+        col["links"] = await CollectionLinks(collection_id=col["id"], request=request).get_links(
+            extra_links=col.get("links")
+        )
 
         await _update_collection_scopes(request)
 
         return stac_types.Collection(**col)
-

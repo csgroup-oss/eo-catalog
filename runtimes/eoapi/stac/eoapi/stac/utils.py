@@ -24,18 +24,24 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from buildpg import render
-from eoapi.stac.config import Settings
-from eoapi.stac.constants import X_FORWARDED_FOR, X_ORIGINAL_FORWARDED_FOR, CACHE_KEY_COLLECTIONS
 from stac_fastapi.types.stac import Collections
+
+from eoapi.stac.config import Settings
+from eoapi.stac.constants import (
+    CACHE_KEY_COLLECTIONS,
+    X_FORWARDED_FOR,
+    X_ORIGINAL_FORWARDED_FOR,
+)
 
 if TYPE_CHECKING:
     from fastapi import Request
 
 collections_list = Collections()
+
 
 def request_to_path(request: Request) -> str:
     parsed_url = urlparse(f"{request.url}")
@@ -61,11 +67,9 @@ async def fetch_all_collections_with_scopes(request: Request) -> Collections:
     Returns: a Collections object containing all collection ids and scopes
 
     """
+
     async def _fetch() -> Collections:
-        search_request = {
-            "fields": {"include": ["id", "scope"]},
-            "limit": 100000
-        }
+        search_request = {"fields": {"include": ["id", "scope"]}, "limit": 100000}
         async with request.app.state.get_connection(request, "r") as conn:
             q, p = render(
                 """
@@ -81,5 +85,6 @@ async def fetch_all_collections_with_scopes(request: Request) -> Collections:
 
     if settings.redis_enabled:
         from eoapi.stac.redis import cached_result
+
         return await cached_result(_fetch, cache_key, request)
     return await _fetch()

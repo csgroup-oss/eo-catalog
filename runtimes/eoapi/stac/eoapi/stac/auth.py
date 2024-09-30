@@ -1,13 +1,14 @@
-from typing import Optional, Sequence, List
+from typing import Dict, List, Optional, Sequence
 
 import jwt
-from eoapi.auth_utils import OpenIdConnectAuth
 from fastapi import HTTPException
 from pydantic import AnyHttpUrl
 from pydantic_settings import BaseSettings
 from stac_fastapi.types.stac import Collections
 from starlette import status
 from starlette.requests import Request
+
+from eoapi.auth_utils import OpenIdConnectAuth
 
 
 class EoApiOpenIdConnectSettings(BaseSettings):
@@ -25,9 +26,9 @@ class EoApiOpenIdConnectSettings(BaseSettings):
         "extra": "allow",
     }
 
-class CollectionsScopes:
 
-    collection_scopes = {}
+class CollectionsScopes:
+    collection_scopes: Dict[str, str] = {}
 
     def __init__(self, collections: Collections, scope_var: str):
         self.collections = collections
@@ -36,8 +37,8 @@ class CollectionsScopes:
 
     def set_scopes_for_collections(self):
         """
-        fills the class variable collection_scopes with the scopes given in self.collections using the variable self.scope_var
-        to find the scope in the collection metadata
+        fills the class variable collection_scopes with the scopes given in self.collections using the
+        variable self.scope_var to find the scope in the collection metadata
         """
         scopes = {}
         for collection in self.collections["collections"]:
@@ -74,7 +75,7 @@ def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth)
     Raises:
         HTTPException if the token cannot be decoded or is invalid
     """
-    if not "Authorization" in request.headers:
+    if "Authorization" not in request.headers:
         return []
     token = request.headers["Authorization"].replace("Bearer ", "")
     try:
@@ -95,22 +96,28 @@ def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth)
     return payload["scope"].split()
 
 
-def verify_scope_for_collection(request: Request, collection_id: str, oidc_auth: OpenIdConnectAuth):
+def verify_scope_for_collection(request: Request, collection_id: str = ""):
     """
     checks if the user scopes from the request contain the scope necessary to access the collection with the given id
     Args:
         request: the scopes will be retrieved from the token in the headers of the starlette request
         collection_id: id of the collection for which the scope should be checked
-        oidc_auth: authentication object from which the signing key and the allowed audiences are retrieved
     Raises:
         HTTPException if the token in the request header does not contain the necessary scope
     """
+    if not collection_id:
+        return
+    auth_settings = EoApiOpenIdConnectSettings()
+    oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
     scopes = get_user_scopes_from_request(request, oidc_auth)
     collection_scopes = CollectionsScopes.collection_scopes
     if collection_id in collection_scopes and collection_scopes[collection_id]:
         required_scope = collection_scopes[collection_id]
-        if not required_scope in scopes:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Access to collection {collection_id} not allowed")
+        if required_scope not in scopes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access to collection {collection_id} not allowed",
+            )
 
 
 def get_collections_for_user_scope(request: Request, oidc_auth: OpenIdConnectAuth) -> List[str]:
@@ -130,4 +137,3 @@ def get_collections_for_user_scope(request: Request, oidc_auth: OpenIdConnectAut
         if not scope or scope in scopes:
             collections_with_scope.append(collection_id)
     return collections_with_scope
-

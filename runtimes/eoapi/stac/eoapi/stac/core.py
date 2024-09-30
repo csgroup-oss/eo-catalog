@@ -31,24 +31,7 @@ import attr
 import orjson
 from asyncpg import InvalidDatetimeFormatError
 from buildpg import render
-from eoapi.auth_utils import OpenIdConnectAuth
-from eoapi.stac.auth import (
-    EoApiOpenIdConnectSettings,
-    oidc_auth_from_settings,
-    get_collections_for_user_scope,
-    verify_scope_for_collection
-)
-from eoapi.stac.config import Settings
-from eoapi.stac.constants import (
-    CACHE_KEY_COLLECTION,
-    CACHE_KEY_COLLECTIONS,
-    CACHE_KEY_ITEM,
-    CACHE_KEY_ITEMS,
-    CACHE_KEY_LANDING,
-    CACHE_KEY_SEARCH,
-)
-from eoapi.stac.logs import get_custom_dimensions
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from pydantic import ValidationError
 from pygeofilter.backends.cql2_json import to_cql2
 from pygeofilter.parsers.cql2_text import parse as parse_cql2_text
@@ -68,6 +51,24 @@ from stac_fastapi.types.stac import (
     LandingPage,
 )
 from stac_pydantic.shared import BBox, MimeTypes
+
+from eoapi.auth_utils import OpenIdConnectAuth
+from eoapi.stac.auth import (
+    EoApiOpenIdConnectSettings,
+    get_collections_for_user_scope,
+    oidc_auth_from_settings,
+    verify_scope_for_collection,
+)
+from eoapi.stac.config import Settings
+from eoapi.stac.constants import (
+    CACHE_KEY_COLLECTION,
+    CACHE_KEY_COLLECTIONS,
+    CACHE_KEY_ITEM,
+    CACHE_KEY_ITEMS,
+    CACHE_KEY_LANDING,
+    CACHE_KEY_SEARCH,
+)
+from eoapi.stac.logs import get_custom_dimensions
 
 # from eo_catalog.stac.utils.text_filter import apply_text_filter
 
@@ -225,7 +226,7 @@ class EOCClient(CoreCrudClient):
             "limit": limit,
             "token": token,
             "query": orjson.loads(unquote_plus(query)) if query else query,
-            "q": q
+            "q": q,
         }
 
         clean = clean_search_args(
@@ -245,11 +246,15 @@ class EOCClient(CoreCrudClient):
 
         return await self._collection_search_base(search_request, request=request)
 
-    async def get_collection(self, collection_id: str, request: Request, **_: Any) -> Collection:
+    async def get_collection(
+        self,
+        collection_id: str,
+        request: Request,
+        dep: dict = Depends(verify_scope_for_collection),
+    ) -> Collection:
         """
         Override from stac-fastapi-pgstac to cache result.
         """
-        verify_scope_for_collection(request, collection_id, EOCClient.oidc_auth)
         _super: CoreCrudClient = super()
 
         async def _fetch() -> Collection:
@@ -315,11 +320,11 @@ class EOCClient(CoreCrudClient):
         datetime: Optional[DateTimeType] = None,
         limit: Optional[int] = None,
         token: Optional[str] = None,
+        dep: dict = Depends(verify_scope_for_collection),
     ) -> ItemCollection:
         """
         Override from stac-fastapi-pgstac to cache result.
         """
-        verify_scope_for_collection(request, collection_id, EOCClient.oidc_auth)
         _super: CoreCrudClient = super()
 
         async def _fetch() -> ItemCollection:
@@ -335,11 +340,16 @@ class EOCClient(CoreCrudClient):
         cache_key = f"{CACHE_KEY_ITEMS}:{collection_id}:{bbox}:{datetime}:{limit}:{token}"
         return await cached_result(_fetch, cache_key, request)
 
-    async def get_item(self, item_id: str, collection_id: str, request: Request) -> Item:
+    async def get_item(
+        self,
+        item_id: str,
+        collection_id: str,
+        request: Request,
+        dep: dict = Depends(verify_scope_for_collection),
+    ) -> Item:
         """
         Override from stac-fastapi-pgstac to cache result.
         """
-        verify_scope_for_collection(request, collection_id, EOCClient.oidc_auth)
         _super: CoreCrudClient = super()
 
         async def _fetch() -> Item:
