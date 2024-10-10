@@ -44,7 +44,7 @@ Repository = "https://github.com/csgroup-oss/eo-catalog"
 "Bug Tracker" = "https://github.com/csgroup-oss/eo-catalog/issues"
 
 [project.scripts]
-eocatalog-stac = "eoapi.stac.app:app"
+eocatalog-stac = "eoapi.stac.app:run"
 
 [build-system]
 requires = ["pdm-pep517"]
