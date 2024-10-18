@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_ssl: bool = True
 
+    eoapi_auth_metadata_field: str = "scope"
+    eoapi_auth_update_scope: str = "admin"
+
     stac_extensions: List[str] = [
         "transaction",
         "query",
