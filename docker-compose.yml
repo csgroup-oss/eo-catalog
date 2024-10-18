@@ -154,7 +154,6 @@ services:
 
   database:
     container_name: stac-db
-    image: pgstac
     build:
       context: ./third_party/pgstac
       dockerfile: docker/pgstac/Dockerfile
