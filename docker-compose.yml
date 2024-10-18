@@ -27,8 +27,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       # Application
-      - HOST=0.0.0.0
-      - PORT=8081
+      - APP_HOST
+      - APP_PORT
       - POSTGRES_USER=username
       - POSTGRES_PASS=password
       - POSTGRES_DBNAME=postgis
@@ -49,7 +49,7 @@ services:
         required: false
     depends_on:
       - database
-    command: bash -c "/tmp/scripts/wait-for-it.sh -t 120 -h database -p 5432 && eo-catalog-stac"
+    command: bash -c "/tmp/scripts/wait-for-it.sh -t 120 -h database -p 5432 && eocatalog-stac"
     develop:
       watch:
         - action: sync+restart
