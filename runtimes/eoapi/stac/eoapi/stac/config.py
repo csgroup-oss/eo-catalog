@@ -52,32 +52,16 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_ssl: bool = True
 
-    eoapi_auth_metadata_field: str = "scope"
-    eoapi_auth_update_scope: str = "admin"
-
-    stac_extensions: List[str] = [
-        "transaction",
-        "query",
-        "sort",
-        "fields",
-        "pagination",
-        "filter",
-        "bulk_transactions",
-        "titiler",
-        "freetext_advanced",
-        "collection_search",
-    ]
-
     otel_enabled: bool = False
     otel_service_name: str = "eo-catalog-stac"
 
     @field_validator("cors_origins")
-    def parse_cors_origin(cls, v):
+    def parse_cors_origin(cls, v: str):
         """Parse CORS origins."""
         return [origin.strip() for origin in v.split(",")]
 
     @field_validator("cors_methods")
-    def parse_cors_methods(cls, v):
+    def parse_cors_methods(cls, v: str):
         """Parse CORS methods."""
         return [method.strip() for method in v.split(",")]
 

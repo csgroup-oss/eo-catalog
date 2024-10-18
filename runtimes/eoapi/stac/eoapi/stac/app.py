@@ -26,12 +26,11 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Any, Dict, Optional
 
-from auth import EoApiOpenIdConnectSettings
-from extensions.transaction import EoApiTransactionsClient
 from fastapi import Depends, FastAPI
 from fastapi.responses import ORJSONResponse
-from fastapi.routing import APIRoute
+from runtimes.eoapi.stac.eoapi.stac.auth import AuthSettings, init_oidc_auth
 from stac_fastapi.api.app import StacApi
 from stac_fastapi.api.middleware import ProxyHeaderMiddleware
 from stac_fastapi.api.models import (
@@ -54,6 +53,7 @@ from stac_fastapi.pgstac.db import close_db_connection, connect_to_db
 from stac_fastapi.pgstac.extensions import QueryExtension
 from stac_fastapi.pgstac.transactions import BulkTransactionsClient
 from stac_fastapi.pgstac.types.search import PgstacSearch
+from stac_fastapi.types.extension import ApiExtension
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -61,16 +61,17 @@ from starlette.responses import HTMLResponse
 from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
-from eoapi.auth_utils import OpenIdConnectAuth
-from eoapi.stac.auth import CollectionsScopes, oidc_auth_from_settings, verify_scope_for_collection
+from eoapi.stac.auth import (
+    verify_scope_for_collection,
+)
 from eoapi.stac.config import Settings
 from eoapi.stac.core import EOCClient
 from eoapi.stac.extensions.collection_search import CollectionSearchExtensionWithIds
 from eoapi.stac.extensions.filter import FiltersClient
 from eoapi.stac.extensions.titiller import TiTilerExtension
+from eoapi.stac.extensions.transaction import EoApiTransactionsClient
 from eoapi.stac.logs import init_logging
 from eoapi.stac.middlewares.timeout import add_timeout
-from eoapi.stac.utils import fetch_all_collections_with_scopes
 
 try:
     from importlib.resources import files as resources_files  # type: ignore
@@ -79,15 +80,15 @@ except ImportError:
     from importlib_resources import files as resources_files  # type: ignore
 
 templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))
-auth_settings = EoApiOpenIdConnectSettings()
-settings = Settings(enable_response_models=True)
+
+settings = Settings()
+auth_settings = AuthSettings(_env_prefix="AUTH_")
 
 # Logs
 init_logging(service_name=settings.otel_service_name, debug=settings.debug)
 logger = logging.getLogger(__name__)
 
-# Extensions
-extensions_map = {
+extensions_map: Dict[str, Optional[ApiExtension]] = {
     "transaction": TransactionExtension(
         client=EoApiTransactionsClient(),
         settings=settings,
@@ -103,18 +104,46 @@ extensions_map = {
     "freetext_advanced": FreeTextAdvancedExtension(),
 }
 
-if enabled_extensions := settings.stac_extensions:
-    extensions = [extensions_map[name] for name in enabled_extensions if extensions_map.get(name)]
-else:
-    extensions = [k[v] for k, v in extensions_map.items() if v]
+# some extensions are supported in combination with the collection search extension
+collection_extensions_map: Dict[str, ApiExtension] = {
+    "query": QueryExtension(),
+    "sort": SortExtension(),
+    "fields": FieldsExtension(),
+    "filter": FilterExtension(client=FiltersClient()),
+    "freetext_advanced": FreeTextAdvancedExtension(),
+}
 
 
-if not (enabled_extensions := settings.stac_extensions) or "collection_search" in enabled_extensions:
-    extension = CollectionSearchExtensionWithIds.from_extensions(extensions)
-    extensions.append(extension)
-    collections_get_request_model = extension.GET
-else:
-    collections_get_request_model = EmptyRequest
+enabled_extensions = (
+    os.environ["ENABLED_EXTENSIONS"].split(",")
+    if "ENABLED_EXTENSIONS" in os.environ
+    else list(extensions_map.keys()) + ["collection_search"]
+)
+extensions = [extension for key, extension in extensions_map.items() if key in enabled_extensions]
+
+items_get_request_model = (
+    create_request_model(
+        model_name="ItemCollectionUri",
+        base_model=ItemCollectionUri,
+        mixins=[TokenPaginationExtension().GET],
+        request_type="GET",
+    )
+    if any(isinstance(ext, TokenPaginationExtension) for ext in extensions)
+    else ItemCollectionUri
+)
+
+collection_search_extension = (
+    CollectionSearchExtensionWithIds.from_extensions(
+        [extension for key, extension in collection_extensions_map.items() if key in enabled_extensions]
+    )
+    if "collection_search" in enabled_extensions
+    else None
+)
+
+collections_get_request_model = collection_search_extension.GET if collection_search_extension else EmptyRequest
+
+post_request_model = create_post_request_model(extensions, base_model=PgstacSearch)
+get_request_model = create_get_request_model(extensions)
 
 
 @asynccontextmanager
@@ -128,11 +157,6 @@ async def lifespan(app: FastAPI):
         from eoapi.stac.redis import connect_to_redis
 
         await connect_to_redis(app)
-
-    # add restrictions to endpoints
-    if auth_settings.openid_configuration_url:
-        logger.debug("Add access restrictions to transaction endpoints")
-        await lock_transaction_endpoints()
     yield
 
     logger.debug("Closing db connections...")
@@ -157,20 +181,14 @@ if settings.otel_enabled:
 
     middlewares.append(Middleware(TraceMiddleware, service_name=settings.otel_service_name))
 
-
-# Custom Models
-items_get_model = ItemCollectionUri
-if any(isinstance(ext, TokenPaginationExtension) for ext in extensions):
-    items_get_model = create_request_model(
-        model_name="ItemCollectionUri",
-        base_model=ItemCollectionUri,
-        mixins=[TokenPaginationExtension().GET],
-        request_type="GET",
-    )
-
-itemsearch_exts = [ext for ext in extensions if ext.__class__.__name__ != "CollectionSearchExtensionWithIds"]
-search_get_model = create_get_request_model(itemsearch_exts)
-search_post_model = create_post_request_model(itemsearch_exts, base_model=PgstacSearch)
+swagger_ui_init_oauth: Optional[Dict[str, Any]] = (
+    {
+        "clientId": auth_settings.client_id,
+        "usePkceWithAuthorizationCodeGrant": auth_settings.use_pkce,
+    }
+    if auth_settings.openid_configuration_url
+    else None
+)
 
 api = StacApi(
     app=FastAPI(
@@ -178,25 +196,23 @@ api = StacApi(
         openapi_url=settings.openapi_url,
         docs_url=settings.docs_url,
         redoc_url=None,
-        swagger_ui_init_oauth={
-            "clientId": auth_settings.client_id,
-            "usePkceWithAuthorizationCodeGrant": auth_settings.use_pkce,
-        },
+        swagger_ui_init_oauth=swagger_ui_init_oauth,
         root_path=settings.app_root_path,
         dependencies=[Depends(verify_scope_for_collection)],
     ),
     settings=settings,
     extensions=extensions,
-    client=EOCClient(post_request_model=search_post_model),
-    items_get_request_model=items_get_model,
-    search_get_request_model=search_get_model,
-    search_post_request_model=search_post_model,
+    client=EOCClient(post_request_model=post_request_model),
+    items_get_request_model=items_get_request_model,
+    search_get_request_model=get_request_model,
+    search_post_request_model=post_request_model,
     collections_get_request_model=collections_get_request_model,
     response_class=ORJSONResponse,
     middlewares=middlewares,
 )
 app = api.app
 
+init_oidc_auth(app, auth_settings)
 add_timeout(app, settings.request_timeout)
 
 
@@ -211,41 +227,6 @@ async def viewer_page(request: Request):
         },
         media_type="text/html",
     )
-
-
-async def lock_transaction_endpoints():
-    # get scopes for collections
-    request = Request({"type": "http", "app": app})
-    # get scopes for collections which will be used in dependencies
-    collections = await fetch_all_collections_with_scopes(request)
-    CollectionsScopes(collections, settings.eoapi_auth_metadata_field)
-    oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
-    # basic restricted routes
-    admin_scope = settings.eoapi_auth_update_scope
-    restricted_routes = [
-        ("POST", admin_scope, "/collections"),
-        ("PUT", admin_scope, "/collections/{collection_id}"),
-        ("DELETE", admin_scope, "/collections/{collection_id}"),
-        ("POST", admin_scope, "/collections/{collection_id}/items"),
-        ("PUT", admin_scope, "/collections/{collection_id}/items/{item_id}"),
-        ("DELETE", admin_scope, "/collections/{collection_id}/items/{item_id}"),
-    ]
-    api_routes = {}
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            if route.path in api_routes:
-                api_routes[route.path].append(route)
-            else:
-                api_routes[route.path] = [route]
-    for method, scope, endpoint in restricted_routes:
-        routes = api_routes.get(endpoint)
-        if not routes:
-            continue
-        for route in routes:
-            if method not in route.methods:
-                continue
-            if scope:
-                oidc_auth.apply_auth_dependencies(route, required_token_scopes=[scope])
 
 
 def run() -> None:

@@ -1,74 +1,59 @@
-from typing import Dict, List, Optional, Sequence
+import logging
+from typing import List
 
 import jwt
-from fastapi import HTTPException
-from pydantic import AnyHttpUrl
-from pydantic_settings import BaseSettings
-from stac_fastapi.types.stac import Collections
+from fastapi import FastAPI, HTTPException
+from fastapi.routing import APIRoute
+from runtimes.eoapi.stac.eoapi.stac.utils import all_collections_scopes
 from starlette import status
 from starlette.requests import Request
 
-from eoapi.auth_utils import OpenIdConnectAuth
+from eoapi.auth_utils import OpenIdConnectAuth, OpenIdConnectSettings
+
+logger = logging.getLogger()
 
 
-class EoApiOpenIdConnectSettings(BaseSettings):
-    # Swagger UI config for Authorization Code Flow
-    client_id: str = ""
-    use_pkce: bool = True
-    openid_configuration_url: Optional[AnyHttpUrl] = None
-    openid_configuration_internal_url: Optional[AnyHttpUrl] = None
-
-    allowed_jwt_audiences: Optional[Sequence[str]] = []
-
-    model_config = {
-        "env_prefix": "EOAPI_AUTH_",
-        "env_file": ".env",
-        "extra": "allow",
-    }
+class AuthSettings(OpenIdConnectSettings):
+    metadata_field: str = "scope"
+    update_scope: str = "admin"
 
 
-class CollectionsScopes:
-    collection_scopes: Dict[str, str] = {}
+def init_oidc_auth(app: FastAPI, auth_settings: AuthSettings) -> None:
+    """Initialize Openid Connect authentication."""
+    if not auth_settings.openid_configuration_url:
+        return
 
-    def __init__(self, collections: Collections, scope_var: str):
-        self.collections = collections
-        self.scope_var = scope_var
-        self.set_scopes_for_collections()
+    oidc_auth = OpenIdConnectAuth.from_settings(auth_settings)
 
-    def set_scopes_for_collections(self):
-        """
-        fills the class variable collection_scopes with the scopes given in self.collections using the
-        variable self.scope_var to find the scope in the collection metadata
-        """
-        scopes = {}
-        for collection in self.collections["collections"]:
-            if self.scope_var in collection:
-                scopes[collection["id"]] = collection[self.scope_var]
-            else:
-                scopes[collection["id"]] = None
-        CollectionsScopes.collection_scopes = scopes
+    # Lock transaction extension here.
+    restricted_routes = [
+        ("POST", auth_settings.update_scope, "/collections"),
+        ("PUT", auth_settings.update_scope, "/collections/{collection_id}"),
+        ("DELETE", auth_settings.update_scope, "/collections/{collection_id}"),
+        ("POST", auth_settings.update_scope, "/collections/{collection_id}/items"),
+        ("PUT", auth_settings.update_scope, "/collections/{collection_id}/items/{item_id}"),
+        ("DELETE", auth_settings.update_scope, "/collections/{collection_id}/items/{item_id}"),
+    ]
+    api_routes = {route.path: route for route in app.routes if isinstance(route, APIRoute)}
+    for method, scope, endpoint in restricted_routes:
+        route = api_routes.get(endpoint)
+        if route and method in route.methods:
+            oidc_auth.apply_auth_dependencies(route, required_token_scopes=[scope])
 
+    logger.info(
+        f"Authentication enabled using {auth_settings.openid_configuration_url=}"
+        f" {auth_settings.client_id=} {auth_settings.update_scope=}."
+    )
 
-def oidc_auth_from_settings(cls, settings: EoApiOpenIdConnectSettings) -> OpenIdConnectAuth:
-    """
-    creates an OpenIdConnectAuth object from the given settings
-    Args:
-        cls: class of the auth object to be created
-        settings: open id connect settings to be used
-
-    Returns:
-        OpenIdConnectAuth object
-    """
-    return OpenIdConnectAuth(**settings.model_dump(include=cls.__dataclass_fields__.keys()))
+    app.state.oidc_auth = oidc_auth
+    app.state.auth_settings = auth_settings
 
 
-def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth) -> List[str]:
+def get_user_scopes_from_request(request: Request) -> List[str]:
     """
     retrieves the scopes of the user based on the given request
     Args:
         request: the scopes will be retrieved from the token in the headers of the starlette request
-        oidc_auth: authentication object from which the signing key and the allowed audiences are retrieved
-
     Returns:
         List of the user scopes
 
@@ -77,6 +62,9 @@ def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth)
     """
     if "Authorization" not in request.headers:
         return []
+
+    oidc_auth: OpenIdConnectAuth = request.app.state.oidc_auth
+
     token = request.headers["Authorization"].replace("Bearer ", "")
     try:
         key = oidc_auth.jwks_client.get_signing_key_from_jwt(token).key
@@ -96,7 +84,7 @@ def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth)
     return payload["scope"].split()
 
 
-def verify_scope_for_collection(request: Request, collection_id: str = ""):
+async def verify_scope_for_collection(request: Request, collection_id: str = ""):
     """
     checks if the user scopes from the request contain the scope necessary to access the collection with the given id
     Args:
@@ -105,35 +93,44 @@ def verify_scope_for_collection(request: Request, collection_id: str = ""):
     Raises:
         HTTPException if the token in the request header does not contain the necessary scope
     """
-    if not collection_id:
+    auth_settings = getattr(request.app.state, "auth_settings")
+
+    if not collection_id or not auth_settings:
         return
-    auth_settings = EoApiOpenIdConnectSettings()
-    oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
-    scopes = get_user_scopes_from_request(request, oidc_auth)
-    collection_scopes = CollectionsScopes.collection_scopes
-    if collection_id in collection_scopes and collection_scopes[collection_id]:
-        required_scope = collection_scopes[collection_id]
-        if required_scope not in scopes:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access to collection {collection_id} not allowed",
-            )
+
+    scopes = get_user_scopes_from_request(request)
+    collections = await all_collections_scopes(request)
+
+    collection = next((c for c in collections["collections"] if c["id"] == collection_id), None)
+
+    if not collection:
+        return
+
+    col_scope = collection.get(auth_settings.metadata_field)
+    if col_scope not in scopes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access to collection {collection_id} is forbidden.",
+        )
 
 
-def get_collections_for_user_scope(request: Request, oidc_auth: OpenIdConnectAuth) -> List[str]:
+async def get_collections_for_user_scope(request: Request) -> List[str]:
     """
     returns the collections which can be accessed with the user scopes from the authorization token of the given request
     Args:
         request: the scopes will be retrieved from the token in the headers of the starlette request
-        oidc_auth: authentication object from which the signing key and the allowed audiences are retrieved
 
     Returns:
         a list of the ids of the collections the user is allowed to access
     """
-    scopes = get_user_scopes_from_request(request, oidc_auth)
-    collection_scopes = CollectionsScopes.collection_scopes
-    collections_with_scope = []
-    for collection_id, scope in collection_scopes.items():
-        if not scope or scope in scopes:
-            collections_with_scope.append(collection_id)
+    auth_settings: AuthSettings = request.app.state.auth_settings
+
+    scopes = get_user_scopes_from_request(request)
+    collections = await all_collections_scopes(request)
+
+    collections_with_scope: List[str] = []
+    for collection in collections["collections"]:
+        col_scope = collection.get(auth_settings.metadata_field)
+        if not col_scope or col_scope in scopes:
+            collections_with_scope.append(collection["id"])
     return collections_with_scope
