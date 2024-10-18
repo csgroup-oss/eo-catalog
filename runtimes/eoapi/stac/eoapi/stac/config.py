@@ -23,7 +23,7 @@
 # SOFTWARE
 """API settings."""
 
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import Field, computed_field, field_validator
 from stac_fastapi.pgstac.config import Settings as BaseSettings

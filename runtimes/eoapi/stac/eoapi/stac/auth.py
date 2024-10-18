@@ -31,10 +31,20 @@ def init_oidc_auth(app: FastAPI, auth_settings: AuthSettings) -> None:
         ("PUT", auth_settings.update_scope, "/collections/{collection_id}"),
         ("DELETE", auth_settings.update_scope, "/collections/{collection_id}"),
         ("POST", auth_settings.update_scope, "/collections/{collection_id}/items"),
-        ("PUT", auth_settings.update_scope, "/collections/{collection_id}/items/{item_id}"),
-        ("DELETE", auth_settings.update_scope, "/collections/{collection_id}/items/{item_id}"),
+        (
+            "PUT",
+            auth_settings.update_scope,
+            "/collections/{collection_id}/items/{item_id}",
+        ),
+        (
+            "DELETE",
+            auth_settings.update_scope,
+            "/collections/{collection_id}/items/{item_id}",
+        ),
     ]
-    api_routes = {route.path: route for route in app.routes if isinstance(route, APIRoute)}
+    api_routes = {
+        route.path: route for route in app.routes if isinstance(route, APIRoute)
+    }
     for method, scope, endpoint in restricted_routes:
         route = api_routes.get(endpoint)
         if route and method in route.methods:
@@ -101,7 +111,9 @@ async def verify_scope_for_collection(request: Request, collection_id: str = "")
     scopes = get_user_scopes_from_request(request)
     collections = await all_collections_scopes(request)
 
-    collection = next((c for c in collections["collections"] if c["id"] == collection_id), None)
+    collection = next(
+        (c for c in collections["collections"] if c["id"] == collection_id), None
+    )
 
     if not collection:
         return

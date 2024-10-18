@@ -106,7 +106,9 @@ class EOCClient(CoreCrudClient):
 
         async def _fetch() -> Collections:
             base_url = get_base_url(request)
-            search_request_json = search_request.model_dump_json(exclude_none=True, by_alias=True)
+            search_request_json = search_request.model_dump_json(
+                exclude_none=True, by_alias=True
+            )
 
             try:
                 async with request.app.state.get_connection(request, "r") as conn:
@@ -118,7 +120,9 @@ class EOCClient(CoreCrudClient):
                     )
                     collections_result: Collections = await conn.fetchval(q, *p)
             except InvalidDatetimeFormatError as e:
-                raise InvalidQueryParameter(f"Datetime parameter {search_request.datetime} is invalid.") from e
+                raise InvalidQueryParameter(
+                    f"Datetime parameter {search_request.datetime} is invalid."
+                ) from e
 
             next: Optional[str] = None
             prev: Optional[str] = None
@@ -133,9 +137,9 @@ class EOCClient(CoreCrudClient):
             if collections is not None and len(collections) > 0:
                 for c in collections:
                     coll = Collection(**c)
-                    coll["links"] = await CollectionLinks(collection_id=coll["id"], request=request).get_links(
-                        extra_links=coll.get("links")
-                    )
+                    coll["links"] = await CollectionLinks(
+                        collection_id=coll["id"], request=request
+                    ).get_links(extra_links=coll.get("links"))
 
                     if self.extension_is_enabled("FilterExtension"):
                         coll["links"].append(
@@ -143,7 +147,9 @@ class EOCClient(CoreCrudClient):
                                 "rel": Relations.queryables.value,
                                 "type": MimeTypes.jsonschema.value,
                                 "title": "Queryables",
-                                "href": urljoin(base_url, f"collections/{coll['id']}/queryables"),
+                                "href": urljoin(
+                                    base_url, f"collections/{coll['id']}/queryables"
+                                ),
                             }
                         )
 
@@ -230,7 +236,9 @@ class EOCClient(CoreCrudClient):
         try:
             search_request = self.post_request_model(**clean)
         except ValidationError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid parameters provided {e}") from e
+            raise HTTPException(
+                status_code=400, detail=f"Invalid parameters provided {e}"
+            ) from e
 
         return await self._collection_search_base(search_request, request=request)
 
@@ -267,7 +275,9 @@ class EOCClient(CoreCrudClient):
         # filter collections depending on the user scope
         if getattr(request.app.state, "auth_settings"):
             allowed_collections = await get_collections_for_user_scope(request)
-            search_request.collections = list(set(allowed_collections) & set(search_request.collections or []))
+            search_request.collections = list(
+                set(allowed_collections) & set(search_request.collections or [])
+            )
 
         async def _fetch() -> ItemCollection:
             result = await _super._search_base(search_request, request=request)
@@ -325,7 +335,9 @@ class EOCClient(CoreCrudClient):
                 token=token,
             )
 
-        cache_key = f"{CACHE_KEY_ITEMS}:{collection_id}:{bbox}:{datetime}:{limit}:{token}"
+        cache_key = (
+            f"{CACHE_KEY_ITEMS}:{collection_id}:{bbox}:{datetime}:{limit}:{token}"
+        )
         return await cached_result(_fetch, cache_key, request)
 
     async def get_item(

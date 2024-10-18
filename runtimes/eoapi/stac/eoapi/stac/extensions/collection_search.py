@@ -29,7 +29,9 @@ import attr
 from pydantic import BaseModel, create_model
 from stac_fastapi.extensions.core import CollectionSearchExtension
 from stac_fastapi.extensions.core.collection_search import ConformanceClasses
-from stac_fastapi.extensions.core.collection_search.request import BaseCollectionSearchGetRequest
+from stac_fastapi.extensions.core.collection_search.request import (
+    BaseCollectionSearchGetRequest,
+)
 from stac_fastapi.types.extension import ApiExtension
 from stac_fastapi.types.search import APIRequest, BaseSearchGetRequest, _ids_converter
 
@@ -83,7 +85,9 @@ class CollectionSearchExtensionWithIds(CollectionSearchExtension):
     """
 
     GET: type[APIRequest] = attr.ib(default=CollectionSearchGetRequest)
-    conformance_classes: List[str] = attr.ib(default=[ConformanceClasses.COLLECTIONSEARCH, ConformanceClasses.BASIS])
+    conformance_classes: List[str] = attr.ib(
+        default=[ConformanceClasses.COLLECTIONSEARCH, ConformanceClasses.BASIS]
+    )
     schema_href: Optional[str] = attr.ib(default=None)
 
     @classmethod

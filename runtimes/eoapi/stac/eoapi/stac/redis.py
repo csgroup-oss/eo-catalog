@@ -48,7 +48,9 @@ from redis.asyncio import RedisCluster
 from stac_fastapi.pgstac.types.base_item_cache import BaseItemCache
 
 from eoapi.stac.constants import CACHE_KEY_BASE_ITEM
-from eoapi.stac.logs import get_custom_dimensions  # Assuming you keep using your logging setup
+from eoapi.stac.logs import (
+    get_custom_dimensions,  # Assuming you keep using your logging setup
+)
 
 Redis = RedisCluster | RedisClient
 
@@ -90,7 +92,9 @@ async def connect_to_redis(app: FastAPI) -> None:
     else:
         app.state.redis = RedisClient(**redis_params)
 
-    logger.info(f"Connected to Redis on {settings.redis_hostname}:{settings.redis_port}")
+    logger.info(
+        f"Connected to Redis on {settings.redis_hostname}:{settings.redis_port}"
+    )
 
 
 async def cached_result(
@@ -177,6 +181,8 @@ class RedisBaseItemCache(BaseItemCache):
 
         if collection_id not in self._base_items:
             cache_key = f"{CACHE_KEY_BASE_ITEM}:{collection_id}"
-            self._base_items[collection_id] = await cached_result(_fetch, cache_key, self._request)
+            self._base_items[collection_id] = await cached_result(
+                _fetch, cache_key, self._request
+            )
 
         return self._base_items[collection_id]

@@ -113,10 +113,14 @@ def get_request_entity(request: Request) -> Union[str, None]:
     """Get the request entity from the given request. If not present as a
     header, attempt to parse from the query string
     """
-    return request.headers.get(X_REQUEST_ENTITY) or request.query_params.get(QS_REQUEST_ENTITY)
+    return request.headers.get(X_REQUEST_ENTITY) or request.query_params.get(
+        QS_REQUEST_ENTITY
+    )
 
 
-def get_custom_dimensions(dimensions: Dict[str, Any], request: Request) -> dict[str, dict[str, Any]]:
+def get_custom_dimensions(
+    dimensions: Dict[str, Any], request: Request
+) -> dict[str, dict[str, Any]]:
     """Merge the base dimensions with the given dimensions."""
     settings = request.app.state.settings
 

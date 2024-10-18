@@ -51,7 +51,9 @@ def request_to_path(request: Request) -> str:
 def get_request_ip(request: Request) -> str:
     """Gets the IP address of the request."""
 
-    ip_header = request.headers.get(X_ORIGINAL_FORWARDED_FOR) or request.headers.get(X_FORWARDED_FOR)
+    ip_header = request.headers.get(X_ORIGINAL_FORWARDED_FOR) or request.headers.get(
+        X_FORWARDED_FOR
+    )
 
     # If multiple IPs, take the last one
     return ip_header.split(",")[-1] if ip_header else ""
@@ -69,7 +71,10 @@ async def all_collections_scopes(request: Request) -> Collections:
     """
 
     async def _fetch() -> Collections:
-        search_request: Dict[str, Any] = {"fields": {"include": ["id", "scope"]}, "limit": 100000}
+        search_request: Dict[str, Any] = {
+            "fields": {"include": ["id", "scope"]},
+            "limit": 100000,
+        }
         async with request.app.state.get_connection(request, "r") as conn:
             q, p = render(
                 """

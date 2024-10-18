@@ -100,7 +100,11 @@ extensions_map: Dict[str, Optional[ApiExtension]] = {
     "pagination": TokenPaginationExtension(),
     "filter": FilterExtension(client=FiltersClient()),
     "bulk_transactions": BulkTransactionExtension(client=BulkTransactionsClient()),
-    "titiler": (TiTilerExtension(titiler_endpoint=settings.titiler_endpoint) if settings.titiler_endpoint else None),
+    "titiler": (
+        TiTilerExtension(titiler_endpoint=settings.titiler_endpoint)
+        if settings.titiler_endpoint
+        else None
+    ),
     "freetext_advanced": FreeTextAdvancedExtension(),
 }
 
@@ -119,7 +123,9 @@ enabled_extensions = (
     if "ENABLED_EXTENSIONS" in os.environ
     else list(extensions_map.keys()) + ["collection_search"]
 )
-extensions = [extension for key, extension in extensions_map.items() if key in enabled_extensions]
+extensions = [
+    extension for key, extension in extensions_map.items() if key in enabled_extensions
+]
 
 items_get_request_model = (
     create_request_model(
@@ -134,13 +140,19 @@ items_get_request_model = (
 
 collection_search_extension = (
     CollectionSearchExtensionWithIds.from_extensions(
-        [extension for key, extension in collection_extensions_map.items() if key in enabled_extensions]
+        [
+            extension
+            for key, extension in collection_extensions_map.items()
+            if key in enabled_extensions
+        ]
     )
     if "collection_search" in enabled_extensions
     else None
 )
 
-collections_get_request_model = collection_search_extension.GET if collection_search_extension else EmptyRequest
+collections_get_request_model = (
+    collection_search_extension.GET if collection_search_extension else EmptyRequest
+)
 
 post_request_model = create_post_request_model(extensions, base_model=PgstacSearch)
 get_request_model = create_get_request_model(extensions)
@@ -179,7 +191,9 @@ if settings.cors_origins:
 if settings.otel_enabled:
     from eoapi.stac.middlewares.tracing import TraceMiddleware
 
-    middlewares.append(Middleware(TraceMiddleware, service_name=settings.otel_service_name))
+    middlewares.append(
+        Middleware(TraceMiddleware, service_name=settings.otel_service_name)
+    )
 
 swagger_ui_init_oauth: Optional[Dict[str, Any]] = (
     {

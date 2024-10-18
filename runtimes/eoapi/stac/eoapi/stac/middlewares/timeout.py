@@ -55,7 +55,9 @@ def with_timeout(
             async def inner(*args: Any, **kwargs: Any) -> Any:
                 start_time = time.monotonic()
                 try:
-                    return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout_seconds)
+                    return await asyncio.wait_for(
+                        func(*args, **kwargs), timeout=timeout_seconds
+                    )
                 except asyncio.TimeoutError as e:
                     process_time = time.monotonic() - start_time
                     # don't have a request object here to get custom dimensions.
@@ -88,9 +90,13 @@ def add_timeout(app: FastAPI, timeout_seconds: float) -> None:
             for depends in route.dependencies[::-1]:
                 route.dependant.dependencies.insert(
                     0,
-                    get_parameterless_sub_dependant(depends=depends, path=route.path_format),
+                    get_parameterless_sub_dependant(
+                        depends=depends, path=route.path_format
+                    ),
                 )
             route.body_field = get_body_field(
-                flat_dependant=route.dependant, name=route.unique_id, embed_body_fields=True
+                flat_dependant=route.dependant,
+                name=route.unique_id,
+                embed_body_fields=True,
             )
             route.app = request_response(route.get_route_handler())
