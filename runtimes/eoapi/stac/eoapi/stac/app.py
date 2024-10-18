@@ -51,7 +51,7 @@ from stac_fastapi.extensions.core import (
 from stac_fastapi.extensions.third_party import BulkTransactionExtension
 from stac_fastapi.pgstac.db import close_db_connection, connect_to_db
 from stac_fastapi.pgstac.extensions import QueryExtension
-from stac_fastapi.pgstac.transactions import BulkTransactionsClient
+from stac_fastapi.pgstac.transactions import BulkTransactionsClient, TransactionsClient
 from stac_fastapi.pgstac.types.search import PgstacSearch
 from stac_fastapi.types.extension import ApiExtension
 from starlette.middleware import Middleware
@@ -69,7 +69,6 @@ from eoapi.stac.core import EOCClient
 from eoapi.stac.extensions.collection_search import CollectionSearchExtensionWithIds
 from eoapi.stac.extensions.filter import FiltersClient
 from eoapi.stac.extensions.titiller import TiTilerExtension
-from eoapi.stac.extensions.transaction import EoApiTransactionsClient
 from eoapi.stac.logs import init_logging
 from eoapi.stac.middlewares.timeout import add_timeout
 
@@ -90,7 +89,7 @@ logger = logging.getLogger(__name__)
 
 extensions_map: Dict[str, Optional[ApiExtension]] = {
     "transaction": TransactionExtension(
-        client=EoApiTransactionsClient(),
+        client=TransactionsClient(),
         settings=settings,
         response_class=ORJSONResponse,
     ),
