@@ -29,7 +29,7 @@ git clone https://github.com/csgroup-oss/eo-catalog.git
 cd eo-catalog
 
 # for eo_catalog.stac
-python -m pip install -r eo_catalog/stac/requirements-dev.txt --no-cache-dir
+python -m pip install "runtimes/eoapi/stac[dev]"
 pre-commit install
 ```
 
