@@ -64,3 +64,16 @@ Environment variables to configure EO Catalog STAC API.
 | OTEL_EXPORTER_OTLP_TRACES_ENDPOINT | Opentelemetry endpoint for traces. If set override OTEL_EXPORTER_OTLP_ENDPOINT for traces | |
 
 Full Opentelemetry configuration options available from https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/.
+
+### Authentication
+
+The subsequent environment variables are used for the configuration of authentication and authorization for access to collections.
+
+| Name | description                                                                             | default |
+| --- |-----------------------------------------------------------------------------------------| --- |
+| EOAPI_AUTH_CLIENT_ID | client id used for authentication                                                       | |
+| EOAPI_AUTH_OPENID_CONFIGURATION_URL | url to access the openid configuration                                                  | |
+| EOAPI_AUTH_USE_PKCE | use Proof Key for Code Exchange                                                         | true |
+| EOAPI_AUTH_ALLOWED_JWT_AUDIENCES | allowed JSON web token audiences (has to be set if audience is given in the user token) | |
+| EOAPI_AUTH_UPDATE_SCOPE | scope required to update collections and items | admin |
+| EOAPI_AUTH_METADATA_FIELD | field where the scope can be found in the collection metadata | scope |
