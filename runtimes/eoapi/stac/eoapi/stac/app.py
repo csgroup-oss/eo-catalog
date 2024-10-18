@@ -30,7 +30,6 @@ from typing import Any, Dict, Optional
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import ORJSONResponse
-from runtimes.eoapi.stac.eoapi.stac.auth import AuthSettings, init_oidc_auth
 from stac_fastapi.api.app import StacApi
 from stac_fastapi.api.middleware import ProxyHeaderMiddleware
 from stac_fastapi.api.models import (
@@ -62,6 +61,8 @@ from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
 from eoapi.stac.auth import (
+    AuthSettings,
+    init_oidc_auth,
     verify_scope_for_collection,
 )
 from eoapi.stac.config import Settings

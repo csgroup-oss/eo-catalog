@@ -4,11 +4,11 @@ from typing import List
 import jwt
 from fastapi import FastAPI, HTTPException
 from fastapi.routing import APIRoute
-from runtimes.eoapi.stac.eoapi.stac.utils import all_collections_scopes
 from starlette import status
 from starlette.requests import Request
 
 from eoapi.auth_utils import OpenIdConnectAuth, OpenIdConnectSettings
+from eoapi.stac.utils import all_collections_scopes
 
 logger = logging.getLogger()
 

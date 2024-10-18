@@ -67,8 +67,6 @@ from eoapi.stac.constants import (
 )
 from eoapi.stac.logs import get_custom_dimensions
 
-# from eo_catalog.stac.utils.text_filter import apply_text_filter
-
 logger = logging.getLogger(__name__)
 
 

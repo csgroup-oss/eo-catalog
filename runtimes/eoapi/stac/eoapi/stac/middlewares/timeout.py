@@ -90,5 +90,7 @@ def add_timeout(app: FastAPI, timeout_seconds: float) -> None:
                     0,
                     get_parameterless_sub_dependant(depends=depends, path=route.path_format),
                 )
-            route.body_field = get_body_field(flat_dependant=route.dependant, name=route.unique_id, embed_body_fields=True)
+            route.body_field = get_body_field(
+                flat_dependant=route.dependant, name=route.unique_id, embed_body_fields=True
+            )
             route.app = request_response(route.get_route_handler())
