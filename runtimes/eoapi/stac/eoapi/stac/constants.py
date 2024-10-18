@@ -23,8 +23,6 @@
 # SOFTWARE
 """Constants."""
 
-DEFAULT_TTL = 600  # 10 minutes
-
 # Headers containing information about the requester's
 # IP address. Checked in the order listed here.
 X_ORIGINAL_FORWARDED_FOR = "X-Original-Forwarded-For"

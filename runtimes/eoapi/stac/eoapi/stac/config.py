@@ -28,8 +28,6 @@ from typing import Optional
 from pydantic import Field, computed_field, field_validator
 from stac_fastapi.pgstac.config import Settings as BaseSettings
 
-from eoapi.stac.constants import DEFAULT_TTL
-
 
 class Settings(BaseSettings):
     """API settings"""
@@ -46,7 +44,7 @@ class Settings(BaseSettings):
     request_timeout: int = Field(default=30, description="Timeout pending requests.")
 
     redis_cluster: bool = False
-    redis_ttl: int = Field(default=DEFAULT_TTL)
+    redis_ttl: int = Field(default=600)  # 10 min
     redis_hostname: Optional[str] = None
     redis_password: str = ""
     redis_port: int = 6379
