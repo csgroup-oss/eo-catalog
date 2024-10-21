@@ -31,7 +31,7 @@ import attr
 import orjson
 from asyncpg import InvalidDatetimeFormatError
 from buildpg import render
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 from pydantic import ValidationError
 from pygeofilter.backends.cql2_json import to_cql2
 from pygeofilter.parsers.cql2_text import parse as parse_cql2_text
@@ -52,12 +52,8 @@ from stac_fastapi.types.stac import (
 )
 from stac_pydantic.shared import BBox, MimeTypes
 
-from eoapi.auth_utils import OpenIdConnectAuth
 from eoapi.stac.auth import (
-    EoApiOpenIdConnectSettings,
     get_collections_for_user_scope,
-    oidc_auth_from_settings,
-    verify_scope_for_collection,
 )
 from eoapi.stac.config import Settings
 from eoapi.stac.constants import (
@@ -70,8 +66,6 @@ from eoapi.stac.constants import (
 )
 from eoapi.stac.logs import get_custom_dimensions
 
-# from eo_catalog.stac.utils.text_filter import apply_text_filter
-
 logger = logging.getLogger(__name__)
 
 
@@ -80,8 +74,6 @@ class EOCClient(CoreCrudClient):
     """Client for core endpoints defined by stac."""
 
     extra_conformance_classes: List[str] = attr.ib(factory=list)
-    auth_settings = EoApiOpenIdConnectSettings()
-    oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
 
     async def landing_page(self, **kwargs: Any) -> LandingPage:
         """
@@ -113,7 +105,9 @@ class EOCClient(CoreCrudClient):
 
         async def _fetch() -> Collections:
             base_url = get_base_url(request)
-            search_request_json = search_request.model_dump_json(exclude_none=True, by_alias=True)
+            search_request_json = search_request.model_dump_json(
+                exclude_none=True, by_alias=True
+            )
 
             try:
                 async with request.app.state.get_connection(request, "r") as conn:
@@ -125,28 +119,26 @@ class EOCClient(CoreCrudClient):
                     )
                     collections_result: Collections = await conn.fetchval(q, *p)
             except InvalidDatetimeFormatError as e:
-                raise InvalidQueryParameter(f"Datetime parameter {search_request.datetime} is invalid.") from e
+                raise InvalidQueryParameter(
+                    f"Datetime parameter {search_request.datetime} is invalid."
+                ) from e
 
             next: Optional[str] = None
             prev: Optional[str] = None
 
             # commented for the moment because the pagination is not working for collection search
             # if links := collections_result.get("links"):
-            #     for link in links:
-            #         if link.get("rel") == "prev":
-            #             prev = link
-            #         elif link.get("rel") == "next":
-            #             next = link
-            #     links = [link for link in links if link.get("rel") not in ["prev", "next"]]
+            #     next = collections_result["links"].pop("next")
+            #     prev = collections_result["links"].pop("prev")
 
             linked_collections: List[Collection] = []
             collections = collections_result["collections"]
             if collections is not None and len(collections) > 0:
                 for c in collections:
                     coll = Collection(**c)
-                    coll["links"] = await CollectionLinks(collection_id=coll["id"], request=request).get_links(
-                        extra_links=coll.get("links")
-                    )
+                    coll["links"] = await CollectionLinks(
+                        collection_id=coll["id"], request=request
+                    ).get_links(extra_links=coll.get("links"))
 
                     if self.extension_is_enabled("FilterExtension"):
                         coll["links"].append(
@@ -154,7 +146,9 @@ class EOCClient(CoreCrudClient):
                                 "rel": Relations.queryables.value,
                                 "type": MimeTypes.jsonschema.value,
                                 "title": "Queryables",
-                                "href": urljoin(base_url, f"collections/{coll['id']}/queryables"),
+                                "href": urljoin(
+                                    base_url, f"collections/{coll['id']}/queryables"
+                                ),
                             }
                         )
 
@@ -211,16 +205,15 @@ class EOCClient(CoreCrudClient):
         Can be simplified once https://github.com/stac-utils/stac-fastapi-pgstac/pull/136 is merged.
         """
         # filter ids depending on the user scope
-        collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
-        if not ids:
-            ids = collections_with_scopes
-        else:
-            ids = list(set(collections_with_scopes) & set(ids))
+        if getattr(request.app.state, "auth_settings"):
+            allowed_collections = await get_collections_for_user_scope(request)
+            ids = list(set(allowed_collections) & set(ids or []))
+
         # don't return the scope of the collection
-        if not fields:
-            fields = []
+        fields = fields or []
         fields.append("-scope")
-        base_args = {
+
+        base_args: Dict[str, Any] = {
             "ids": ids,
             "bbox": bbox,
             "limit": limit,
@@ -242,7 +235,9 @@ class EOCClient(CoreCrudClient):
         try:
             search_request = self.post_request_model(**clean)
         except ValidationError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid parameters provided {e}") from e
+            raise HTTPException(
+                status_code=400, detail=f"Invalid parameters provided {e}"
+            ) from e
 
         return await self._collection_search_base(search_request, request=request)
 
@@ -250,7 +245,6 @@ class EOCClient(CoreCrudClient):
         self,
         collection_id: str,
         request: Request,
-        dep: dict = Depends(verify_scope_for_collection),
     ) -> Collection:
         """
         Override from stac-fastapi-pgstac to cache result.
@@ -275,11 +269,13 @@ class EOCClient(CoreCrudClient):
         Override from stac-fastapi-pgstac to cache results and add telemetry.
         """
         _super: CoreCrudClient = super()
-        collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
-        if not search_request.collections:
-            search_request.collections = collections_with_scopes
-        else:
-            search_request.collections = list(set(collections_with_scopes) & set(search_request.collections))
+
+        # filter collections depending on the user scope
+        if getattr(request.app.state, "auth_settings"):
+            allowed_collections = await get_collections_for_user_scope(request)
+            search_request.collections = list(
+                set(allowed_collections) & set(search_request.collections or [])
+            )
 
         async def _fetch() -> ItemCollection:
             result = await _super._search_base(search_request, request=request)
@@ -320,7 +316,6 @@ class EOCClient(CoreCrudClient):
         datetime: Optional[DateTimeType] = None,
         limit: Optional[int] = None,
         token: Optional[str] = None,
-        dep: dict = Depends(verify_scope_for_collection),
     ) -> ItemCollection:
         """
         Override from stac-fastapi-pgstac to cache result.
@@ -337,7 +332,9 @@ class EOCClient(CoreCrudClient):
                 token=token,
             )
 
-        cache_key = f"{CACHE_KEY_ITEMS}:{collection_id}:{bbox}:{datetime}:{limit}:{token}"
+        cache_key = (
+            f"{CACHE_KEY_ITEMS}:{collection_id}:{bbox}:{datetime}:{limit}:{token}"
+        )
         return await cached_result(_fetch, cache_key, request)
 
     async def get_item(
@@ -345,7 +342,6 @@ class EOCClient(CoreCrudClient):
         item_id: str,
         collection_id: str,
         request: Request,
-        dep: dict = Depends(verify_scope_for_collection),
     ) -> Item:
         """
         Override from stac-fastapi-pgstac to cache result.

@@ -56,7 +56,9 @@ def init_tracing(service_name: str) -> None:
     tracer_provider.add_span_processor(processor)
     trace.set_tracer_provider(tracer_provider)
 
-    logger.info(f"Exporting telemetry traces to {otlp_exporter._endpoint} as {service_name}.")
+    logger.info(
+        f"Exporting telemetry traces to {otlp_exporter._endpoint} as {service_name}."
+    )
 
 
 class TraceMiddleware:
@@ -108,20 +110,26 @@ collection_id_re = re.compile(
 )
 
 
-async def _collection_item_from_request(request: Request) -> Tuple[Optional[str], Optional[str]]:
+async def _collection_item_from_request(
+    request: Request,
+) -> Tuple[Optional[str], Optional[str]]:
     """Attempt to get collection and item ids from the request path or querystring."""
     url = request.url
     try:
         collection_id_match = collection_id_re.match(f"{url}")
         if collection_id_match:
-            collection_id = cast(Optional[str], collection_id_match.group("collection_id"))
+            collection_id = cast(
+                Optional[str], collection_id_match.group("collection_id")
+            )
             item_id = cast(Optional[str], collection_id_match.group("item_id"))
             return (collection_id, item_id)
         else:
             collection_id = request.query_params.get("collection")
             # Some endpoints, like preview/, take an `items` parameter, but
             # conventionally it is a single item id
-            item_id = request.query_params.get("item") or request.query_params.get("items")
+            item_id = request.query_params.get("item") or request.query_params.get(
+                "items"
+            )
             return (collection_id, item_id)
     except Exception as e:
         logger.exception(e)
@@ -134,7 +142,9 @@ def _should_trace_request(request: Request) -> bool:
         - Not a HEAD request
         - Not a health check endpoint
     """
-    return request.method.lower() != "head" and not request.url.path.strip("/").endswith("_mgmt/ping")
+    return request.method.lower() != "head" and not request.url.path.strip(
+        "/"
+    ).endswith("_mgmt/ping")
 
 
 def _parse_cqljson(cql: dict) -> Tuple[Optional[str], Optional[str]]:
@@ -175,7 +185,9 @@ def _parse_queryjson(query: dict) -> Tuple[Optional[str], Optional[str]]:
     return (collection_ids, item_ids)
 
 
-def _iter_cql(cql: Optional[Dict[str, Any]], property_name: str) -> Optional[Union[str, List[str]]]:
+def _iter_cql(
+    cql: Optional[Dict[str, Any]], property_name: str
+) -> Optional[Union[str, List[str]]]:
     """
     Recurse through a CQL or CQL2 filter body, returning the value of the
     provided property name, if found. Typical usage will be to provide
@@ -205,7 +217,9 @@ def add_stac_attributes_from_search(search_json: str, request: fastapi.Request) 
     """
     Try to add the Collection ID and Item ID from a search to the current span.
     """
-    collection_id, item_id = parse_collection_from_search(json.loads(search_json), request.method, request.query_params)
+    collection_id, item_id = parse_collection_from_search(
+        json.loads(search_json), request.method, request.query_params
+    )
     parent_span = getattr(request.state, "parent_span", None)
 
     current_span = get_current_span() or parent_span
@@ -241,5 +255,8 @@ def parse_collection_from_search(
             elif "filter" in body:
                 return _parse_cqljson(body["filter"])
         except json.JSONDecodeError as e:
-            logger.warning("Unable to parse search body as JSON. Ignoring collection" f"parameter. {e}")
+            logger.warning(
+                "Unable to parse search body as JSON. Ignoring collection"
+                f"parameter. {e}"
+            )
     return (None, None)

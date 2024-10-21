@@ -23,12 +23,10 @@
 # SOFTWARE
 """API settings."""
 
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import Field, computed_field, field_validator
 from stac_fastapi.pgstac.config import Settings as BaseSettings
-
-from eoapi.stac.constants import DEFAULT_TTL
 
 
 class Settings(BaseSettings):
@@ -46,38 +44,22 @@ class Settings(BaseSettings):
     request_timeout: int = Field(default=30, description="Timeout pending requests.")
 
     redis_cluster: bool = False
-    redis_ttl: int = Field(default=DEFAULT_TTL)
+    redis_ttl: int = Field(default=600)  # 10 min
     redis_hostname: Optional[str] = None
     redis_password: str = ""
     redis_port: int = 6379
     redis_ssl: bool = True
 
-    eoapi_auth_metadata_field: str = "scope"
-    eoapi_auth_update_scope: str = "admin"
-
-    stac_extensions: List[str] = [
-        "transaction",
-        "query",
-        "sort",
-        "fields",
-        "pagination",
-        "filter",
-        "bulk_transactions",
-        "titiler",
-        "freetext_advanced",
-        "collection_search",
-    ]
-
     otel_enabled: bool = False
     otel_service_name: str = "eo-catalog-stac"
 
     @field_validator("cors_origins")
-    def parse_cors_origin(cls, v):
+    def parse_cors_origin(cls, v: str):
         """Parse CORS origins."""
         return [origin.strip() for origin in v.split(",")]
 
     @field_validator("cors_methods")
-    def parse_cors_methods(cls, v):
+    def parse_cors_methods(cls, v: str):
         """Parse CORS methods."""
         return [method.strip() for method in v.split(",")]
 

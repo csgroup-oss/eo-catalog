@@ -12,7 +12,11 @@ name = "eocatalog.stac"
 description = "STAC Metadata service for EO Catalog."
 readme = "README.md"
 requires-python = ">=3.8"
-authors = [{ name = "CS GROUP - France" }]
+authors = [
+    { name = "CS GROUP - France" },
+    { name = "Vincent Sarago", email = "vincent@developmentseed.com" },
+    { name = "Microsoft" },
+]
 license = { text = "MIT" }
 classifiers = [
     "Intended Audience :: Information Technology",
@@ -72,7 +76,6 @@ env_files = [".env"]
 addopts = "-m \"mocked and not databaseConnection and not httpConnection\""
 
 [tool.ruff]
-line-length = 120
 target-version = "py38"
 
 [tool.ruff.format]
@@ -80,9 +83,8 @@ docstring-code-format = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C90", "I"]
-
-[tool.ruff.lint.pycodestyle]
-max-line-length = 120
+# Never enforce `E501` (line length violations).
+ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["eo-catalog.stac"]

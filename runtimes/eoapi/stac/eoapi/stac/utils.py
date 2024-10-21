@@ -24,7 +24,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 from urllib.parse import urlparse
 
 from buildpg import render
@@ -51,13 +51,15 @@ def request_to_path(request: Request) -> str:
 def get_request_ip(request: Request) -> str:
     """Gets the IP address of the request."""
 
-    ip_header = request.headers.get(X_ORIGINAL_FORWARDED_FOR) or request.headers.get(X_FORWARDED_FOR)
+    ip_header = request.headers.get(X_ORIGINAL_FORWARDED_FOR) or request.headers.get(
+        X_FORWARDED_FOR
+    )
 
     # If multiple IPs, take the last one
     return ip_header.split(",")[-1] if ip_header else ""
 
 
-async def fetch_all_collections_with_scopes(request: Request) -> Collections:
+async def all_collections_scopes(request: Request) -> Collections:
     """
     fetches the ids and scopes of all collections from the database or the redis cache (if enabled)
     updates the redis cache (if enabled) if the data was fetched from the database
@@ -69,7 +71,10 @@ async def fetch_all_collections_with_scopes(request: Request) -> Collections:
     """
 
     async def _fetch() -> Collections:
-        search_request = {"fields": {"include": ["id", "scope"]}, "limit": 100000}
+        search_request: Dict[str, Any] = {
+            "fields": {"include": ["id", "scope"]},
+            "limit": 100000,
+        }
         async with request.app.state.get_connection(request, "r") as conn:
             q, p = render(
                 """
@@ -80,7 +85,7 @@ async def fetch_all_collections_with_scopes(request: Request) -> Collections:
             collections_result: Collections = await conn.fetchval(q, *p)
             return collections_result
 
-    cache_key = f"{CACHE_KEY_COLLECTIONS}_all"
+    cache_key = f"{CACHE_KEY_COLLECTIONS}_scopes"
     settings: Settings = request.app.state.settings
 
     if settings.redis_enabled:
