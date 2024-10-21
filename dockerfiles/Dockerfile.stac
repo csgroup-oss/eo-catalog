@@ -4,8 +4,6 @@ FROM python:${PYTHON_VERSION}-slim
 
 ENV CURL_CA_BUNDLE /etc/ssl/certs/ca-certificates.crt
 
-RUN apt update && apt install git -y
-
 COPY runtimes/eoapi/stac /tmp/stac
 RUN python -m pip install /tmp/stac[server,telemetry,redis]
 RUN rm -rf /tmp/stac
