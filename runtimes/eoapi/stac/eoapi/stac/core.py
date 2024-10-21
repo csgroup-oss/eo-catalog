@@ -31,7 +31,7 @@ import attr
 import orjson
 from asyncpg import InvalidDatetimeFormatError
 from buildpg import render
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 from pydantic import ValidationError
 from pygeofilter.backends.cql2_json import to_cql2
 from pygeofilter.parsers.cql2_text import parse as parse_cql2_text
@@ -54,7 +54,6 @@ from stac_pydantic.shared import BBox, MimeTypes
 
 from eoapi.stac.auth import (
     get_collections_for_user_scope,
-    verify_scope_for_collection,
 )
 from eoapi.stac.config import Settings
 from eoapi.stac.constants import (
@@ -246,7 +245,6 @@ class EOCClient(CoreCrudClient):
         self,
         collection_id: str,
         request: Request,
-        _: None = Depends(verify_scope_for_collection),
     ) -> Collection:
         """
         Override from stac-fastapi-pgstac to cache result.
@@ -318,7 +316,6 @@ class EOCClient(CoreCrudClient):
         datetime: Optional[DateTimeType] = None,
         limit: Optional[int] = None,
         token: Optional[str] = None,
-        _: None = Depends(verify_scope_for_collection),
     ) -> ItemCollection:
         """
         Override from stac-fastapi-pgstac to cache result.
@@ -345,7 +342,6 @@ class EOCClient(CoreCrudClient):
         item_id: str,
         collection_id: str,
         request: Request,
-        _: None = Depends(verify_scope_for_collection),
     ) -> Item:
         """
         Override from stac-fastapi-pgstac to cache result.

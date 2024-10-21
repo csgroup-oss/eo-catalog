@@ -28,8 +28,9 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import ORJSONResponse
+from fastapi.security import OAuth2PasswordBearer
 from stac_fastapi.api.app import StacApi
 from stac_fastapi.api.middleware import ProxyHeaderMiddleware
 from stac_fastapi.api.models import (
@@ -61,9 +62,8 @@ from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
 from eoapi.stac.auth import (
-    AuthSettings,
+    OpenIdConnectSettings,
     init_oidc_auth,
-    verify_scope_for_collection,
 )
 from eoapi.stac.config import Settings
 from eoapi.stac.core import EOCClient
@@ -82,7 +82,31 @@ except ImportError:
 templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))
 
 settings = Settings()
-auth_settings = AuthSettings(_env_prefix="AUTH_")
+auth_settings = OpenIdConnectSettings()
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+# Function to get the current user, make the token optional
+async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)):
+    if token is None:
+        return None  # No token provided, so return None (no authentication)
+
+    # Otherwise, implement your user authentication logic here
+    user = fake_decode_token(token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+def fake_decode_token(token: str):
+    # Dummy function to decode token, replace with actual logic
+    return {"username": "testuser"} if token == "valid_token" else None
+
 
 # Logs
 init_logging(service_name=settings.otel_service_name, debug=settings.debug)
@@ -212,7 +236,6 @@ api = StacApi(
         redoc_url=None,
         swagger_ui_init_oauth=swagger_ui_init_oauth,
         root_path=settings.app_root_path,
-        dependencies=[Depends(verify_scope_for_collection)],
     ),
     settings=settings,
     extensions=extensions,
@@ -241,6 +264,16 @@ async def viewer_page(request: Request):
         },
         media_type="text/html",
     )
+
+
+@app.get("/tests")
+async def read_items(
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user),
+):
+    if current_user:
+        return {"message": f"Hello, {current_user['username']}. Here are your items."}
+    else:
+        return {"message": "Hello, guest. Here are some public items."}
 
 
 def run() -> None:
