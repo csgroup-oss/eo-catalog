@@ -150,3 +150,9 @@ Then, deploy
 ```
 npx cdk deploy --all --require-approval never
 ```
+
+## License
+
+EO Catalog is licensed by [CS GROUP](https://www.csgroup.eu/) under
+the [Apache License, version 2.0](http://www.apache.org/licenses/LICENSE-2.0.html).
+A copy of this license is provided in the [LICENSE](LICENSE) file.
