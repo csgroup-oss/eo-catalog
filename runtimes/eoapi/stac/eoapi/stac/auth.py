@@ -80,7 +80,7 @@ def oidc_auth_from_settings(cls, settings: EoApiOpenIdConnectSettings) -> OpenId
     """
     if settings.openid_configuration_url:
         return OpenIdConnectAuth(**settings.model_dump(include=cls.__dataclass_fields__.keys()))
-    
+
     return None
 
 
@@ -142,7 +142,7 @@ def verify_scope_for_collection(request: Request, collection_id: str = ""):
             )
 
 
-def get_collections_for_user_scope(request: Request, oidc_auth: OpenIdConnectAuth) -> List[str]:
+def get_collections_for_user_scope(request: Request, oidc_auth: OpenIdConnectAuth) -> Optional[List[str]]:
     """
     returns the collections which can be accessed with the user scopes from the authorization token of the given request
     Args:
@@ -152,9 +152,12 @@ def get_collections_for_user_scope(request: Request, oidc_auth: OpenIdConnectAut
     Returns:
         a list of the ids of the collections the user is allowed to access
     """
+    if not oidc_auth or oidc_auth.openid_configuration_url:
+        return None
+
     scopes = get_user_scopes_from_request(request, oidc_auth)
     collection_scopes = CollectionsScopes.collection_scopes
-    collections_with_scope = []
+    collections_with_scope: List[str] = []
     for collection_id, scope in collection_scopes.items():
         if not scope or scope in scopes:
             collections_with_scope.append(collection_id)

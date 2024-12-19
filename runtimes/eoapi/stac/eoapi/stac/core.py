@@ -143,12 +143,14 @@ class EOCClient(CoreCrudClient):
                     )
 
                     if self.extension_is_enabled("FilterExtension"):
-                        coll["links"].append({
-                            "rel": Relations.queryables.value,
-                            "type": MimeTypes.jsonschema.value,
-                            "title": "Queryables",
-                            "href": urljoin(base_url, f"collections/{coll['id']}/queryables"),
-                        })
+                        coll["links"].append(
+                            {
+                                "rel": Relations.queryables.value,
+                                "type": MimeTypes.jsonschema.value,
+                                "title": "Queryables",
+                                "href": urljoin(base_url, f"collections/{coll['id']}/queryables"),
+                            }
+                        )
 
                     linked_collections.append(coll)
 
@@ -267,6 +269,9 @@ class EOCClient(CoreCrudClient):
         Override from stac-fastapi-pgstac to cache results and add telemetry.
         """
         _super: CoreCrudClient = super()
+
+        settings: Settings = request.app.state.settings
+
         collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
         if not search_request.collections:
             search_request.collections = collections_with_scopes
@@ -287,8 +292,6 @@ class EOCClient(CoreCrudClient):
             return item_collection
 
         search_json = search_request.model_dump_json()
-
-        settings: Settings = request.app.state.settings
 
         if settings.otel_enabled:
             from eoapi.stac.middlewares.tracing import add_stac_attributes_from_search
@@ -401,10 +404,12 @@ def clean_search_args(  # noqa: C901
         for sort in sortby:
             sortparts = re.match(r"^([+-]?)(.*)$", sort)
             if sortparts:
-                sort_param.append({
-                    "field": sortparts.group(2).strip(),
-                    "direction": "desc" if sortparts.group(1) == "-" else "asc",
-                })
+                sort_param.append(
+                    {
+                        "field": sortparts.group(2).strip(),
+                        "direction": "desc" if sortparts.group(1) == "-" else "asc",
+                    }
+                )
         base_args["sortby"] = sort_param
 
     if fields:
