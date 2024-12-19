@@ -5,8 +5,6 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from auth import EoApiOpenIdConnectSettings
-from extensions.transaction import EoApiTransactionsClient
 from fastapi import Depends, FastAPI
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute
@@ -40,11 +38,12 @@ from starlette.templating import Jinja2Templates
 from starlette_cramjam.middleware import CompressionMiddleware
 
 from eoapi.auth_utils import OpenIdConnectAuth
-from eoapi.stac.auth import CollectionsScopes, oidc_auth_from_settings, verify_scope_for_collection
+from eoapi.stac.auth import CollectionsScopes, oidc_auth_from_settings, verify_scope_for_collection, EoApiOpenIdConnectSettings
 from eoapi.stac.config import Settings
 from eoapi.stac.core import EOCClient
 from eoapi.stac.extensions.collection_search import CollectionSearchExtensionWithIds
 from eoapi.stac.extensions.filter import FiltersClient
+from eoapi.stac.extensions.transaction import EoApiTransactionsClient
 from eoapi.stac.extensions.titiller import TiTilerExtension
 from eoapi.stac.logs import init_logging
 from eoapi.stac.middlewares.timeout import add_timeout

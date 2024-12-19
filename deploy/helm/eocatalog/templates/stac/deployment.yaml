@@ -267,11 +267,11 @@ spec:
             - name: REDIS_TTL
               value: {{ .Values.stac.redisTTL | quote }}
             - name: OTEL_ENABLED
-              value: {{ .Values.stac.traces.serviceName }}
+              value: {{ .Values.stac.otlp.enabled | quote }}
             - name: OTEL_SERVICE_NAME
-              value: {{ .Values.stac.traces.hostName }}
+              value: {{ .Values.stac.otlp.serviceName }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: {{ .Values.stac.traces.agentPort | quote }}
+              value: {{ .Values.stac.otlp.exporterEndpoint }}
             {{- if .Values.stac.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.stac.extraEnvVars "context" $) | nindent 12 }}
             {{- end }}

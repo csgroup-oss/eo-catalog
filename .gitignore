@@ -172,3 +172,7 @@ node_modules/
 
 .vscode/
 .idea
+
+# helm charts
+**/charts/
+**/Chart.lock

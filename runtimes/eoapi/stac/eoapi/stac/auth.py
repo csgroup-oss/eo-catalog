@@ -68,7 +68,7 @@ class CollectionsScopes:
         CollectionsScopes.collection_scopes = scopes
 
 
-def oidc_auth_from_settings(cls, settings: EoApiOpenIdConnectSettings) -> OpenIdConnectAuth:
+def oidc_auth_from_settings(cls, settings: EoApiOpenIdConnectSettings) -> OpenIdConnectAuth | None:
     """
     creates an OpenIdConnectAuth object from the given settings
     Args:
@@ -78,7 +78,10 @@ def oidc_auth_from_settings(cls, settings: EoApiOpenIdConnectSettings) -> OpenId
     Returns:
         OpenIdConnectAuth object
     """
-    return OpenIdConnectAuth(**settings.model_dump(include=cls.__dataclass_fields__.keys()))
+    if settings.openid_configuration_url:
+        return OpenIdConnectAuth(**settings.model_dump(include=cls.__dataclass_fields__.keys()))
+    
+    return None
 
 
 def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth) -> List[str]:

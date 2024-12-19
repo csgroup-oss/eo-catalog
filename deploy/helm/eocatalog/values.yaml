@@ -137,7 +137,7 @@ stac:
   ## @param stac.otel.serviceName
   ## @param stac.otel.exporterEndpoint
   ##
-  otel:
+  otlp:
     enabled: false
     serviceName: eo-catalog
     exporterEndpoint:

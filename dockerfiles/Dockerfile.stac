@@ -12,3 +12,5 @@ RUN rm -rf /tmp/stac
 
 ENV MODULE_NAME eoapi.stac.app
 ENV VARIABLE_NAME app
+
+CMD [ "/bin/sh", "-c", "eocatalog-stac" ]
