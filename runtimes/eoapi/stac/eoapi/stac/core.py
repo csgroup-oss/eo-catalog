@@ -208,7 +208,7 @@ class EOCClient(CoreCrudClient):
         collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
         if not ids:
             ids = collections_with_scopes
-        else:
+        elif collections_with_scopes:
             ids = list(set(collections_with_scopes) & set(ids))
         # don't return the scope of the collection
         if not fields:
@@ -275,7 +275,7 @@ class EOCClient(CoreCrudClient):
         collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
         if not search_request.collections:
             search_request.collections = collections_with_scopes
-        else:
+        elif collections_with_scopes:
             search_request.collections = list(set(collections_with_scopes) & set(search_request.collections))
 
         async def _fetch() -> ItemCollection:
