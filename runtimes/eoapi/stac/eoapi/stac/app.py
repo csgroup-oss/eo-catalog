@@ -21,6 +21,7 @@ from stac_fastapi.extensions.core import (
     FieldsExtension,
     FilterExtension,
     FreeTextAdvancedExtension,
+    OffsetPaginationExtension,
     SortExtension,
     TokenPaginationExtension,
     TransactionExtension,
@@ -30,6 +31,7 @@ from stac_fastapi.pgstac.db import close_db_connection, connect_to_db
 from stac_fastapi.pgstac.extensions import QueryExtension
 from stac_fastapi.pgstac.transactions import BulkTransactionsClient
 from stac_fastapi.pgstac.types.search import PgstacSearch
+from stac_fastapi.types.extension import ApiExtension
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -69,7 +71,7 @@ init_logging(service_name=settings.otel_service_name, debug=settings.debug)
 logger = logging.getLogger(__name__)
 
 # Extensions
-extensions_map = {
+extensions_map: dict[str, ApiExtension] = {
     "transaction": TransactionExtension(
         client=EoApiTransactionsClient(),
         settings=settings,
@@ -81,22 +83,54 @@ extensions_map = {
     "pagination": TokenPaginationExtension(),
     "filter": FilterExtension(client=FiltersClient()),
     "bulk_transactions": BulkTransactionExtension(client=BulkTransactionsClient()),
-    "titiler": (TiTilerExtension(titiler_endpoint=settings.titiler_endpoint) if settings.titiler_endpoint else None),
     "freetext_advanced": FreeTextAdvancedExtension(),
 }
 
-if enabled_extensions := settings.stac_extensions:
-    extensions = [extensions_map[name] for name in enabled_extensions if extensions_map.get(name)]
-else:
-    extensions = [k[v] for k, v in extensions_map.items() if v]
+if settings.titiler_endpoint:
+    extensions_map["titiler"] = TiTilerExtension(titiler_endpoint=settings.titiler_endpoint)
 
 
-if not (enabled_extensions := settings.stac_extensions) or "collection_search" in enabled_extensions:
-    extension = CollectionSearchExtensionWithIds.from_extensions(extensions)
-    extensions.append(extension)
-    collections_get_request_model = extension.GET
-else:
-    collections_get_request_model = EmptyRequest
+# some extensions are supported in combination with the collection search extension
+collection_extensions_map: dict[str, ApiExtension] = {
+    "query": QueryExtension(),
+    "sort": SortExtension(),
+    "fields": FieldsExtension(),
+    "filter": FilterExtension(client=FiltersClient()),
+    "pagination": OffsetPaginationExtension(),
+    "freetext_advanced": FreeTextAdvancedExtension(),
+}
+
+enabled_extensions = (
+    os.environ["ENABLED_EXTENSIONS"].split(",")
+    if "ENABLED_EXTENSIONS" in os.environ
+    else list(extensions_map.keys()) + ["collection_search"]
+)
+extensions = [extension for key, extension in extensions_map.items() if key in enabled_extensions]
+
+items_get_request_model = (
+    create_request_model(
+        model_name="ItemCollectionUri",
+        base_model=ItemCollectionUri,
+        mixins=[TokenPaginationExtension().GET],
+        request_type="GET",
+    )
+    if any(isinstance(ext, TokenPaginationExtension) for ext in extensions)
+    else ItemCollectionUri
+)
+
+
+collection_search_extension = (
+    CollectionSearchExtensionWithIds.from_extensions(
+        [extension for key, extension in collection_extensions_map.items() if key in enabled_extensions]
+    )
+    if "collection_search" in enabled_extensions
+    else None
+)
+
+collections_get_request_model = collection_search_extension.GET if collection_search_extension else EmptyRequest
+
+post_request_model = create_post_request_model(extensions, base_model=PgstacSearch)
+get_request_model = create_get_request_model(extensions)
 
 
 @asynccontextmanager
@@ -123,36 +157,20 @@ async def lifespan(app: FastAPI):
 
 
 # Middlewares
-middlewares = [Middleware(CompressionMiddleware), Middleware(ProxyHeaderMiddleware)]
-if settings.cors_origins:
-    middlewares.append(
-        Middleware(
-            CORSMiddleware,
-            allow_origins=settings.cors_origins,
-            allow_credentials=True,
-            allow_methods=settings.cors_methods,
-            allow_headers=["*"],
-        )
-    )
+middlewares = [
+    Middleware(CompressionMiddleware),
+    Middleware(ProxyHeaderMiddleware),
+    Middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_methods=settings.cors_methods,
+    ),
+]
+
 if settings.otel_enabled:
     from eoapi.stac.middlewares.tracing import TraceMiddleware
 
     middlewares.append(Middleware(TraceMiddleware, service_name=settings.otel_service_name))
-
-
-# Custom Models
-items_get_model = ItemCollectionUri
-if any(isinstance(ext, TokenPaginationExtension) for ext in extensions):
-    items_get_model = create_request_model(
-        model_name="ItemCollectionUri",
-        base_model=ItemCollectionUri,
-        mixins=[TokenPaginationExtension().GET],
-        request_type="GET",
-    )
-
-itemsearch_exts = [ext for ext in extensions if ext.__class__.__name__ != "CollectionSearchExtensionWithIds"]
-search_get_model = create_get_request_model(itemsearch_exts)
-search_post_model = create_post_request_model(itemsearch_exts, base_model=PgstacSearch)
 
 api = StacApi(
     app=FastAPI(
@@ -168,11 +186,11 @@ api = StacApi(
         dependencies=[Depends(verify_scope_for_collection)],
     ),
     settings=settings,
-    extensions=extensions,
-    client=EOCClient(post_request_model=search_post_model),
-    items_get_request_model=items_get_model,
-    search_get_request_model=search_get_model,
-    search_post_request_model=search_post_model,
+    extensions=extensions + [collection_search_extension] if collection_search_extension else extensions,
+    client=EOCClient(post_request_model=post_request_model),  # type: ignore
+    items_get_request_model=items_get_request_model,
+    search_get_request_model=get_request_model,
+    search_post_request_model=post_request_model,
     collections_get_request_model=collections_get_request_model,
     response_class=ORJSONResponse,
     middlewares=middlewares,

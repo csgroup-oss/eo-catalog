@@ -1,7 +1,7 @@
 # Copyright 2024, CS GROUP - France, https://www.csgroup.eu/
 """API settings."""
 
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import Field, computed_field, field_validator
 from stac_fastapi.pgstac.config import Settings as BaseSettings
@@ -32,19 +32,6 @@ class Settings(BaseSettings):
 
     eoapi_auth_metadata_field: str = "scope"
     eoapi_auth_update_scope: str = "admin"
-
-    stac_extensions: List[str] = [
-        "transaction",
-        "query",
-        "sort",
-        "fields",
-        "pagination",
-        "filter",
-        "bulk_transactions",
-        "titiler",
-        "freetext_advanced",
-        "collection_search",
-    ]
 
     otel_enabled: bool = False
     otel_service_name: str = "eo-catalog-stac"

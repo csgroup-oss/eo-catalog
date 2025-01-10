@@ -15,6 +15,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import logging
 import re
 import time
@@ -23,18 +24,15 @@ from urllib.parse import unquote_plus, urljoin
 
 import attr
 import orjson
-from asyncpg import InvalidDatetimeFormatError
 from buildpg import render
-from fastapi import Depends, HTTPException, Request
-from pydantic import ValidationError
+from fastapi import Depends, Request
 from pygeofilter.backends.cql2_json import to_cql2
 from pygeofilter.parsers.cql2_text import parse as parse_cql2_text
 from stac_fastapi.pgstac.core import CoreCrudClient
-from stac_fastapi.pgstac.models.links import CollectionLinks, PagingLinks
+from stac_fastapi.pgstac.models.links import CollectionLinks
 from stac_fastapi.pgstac.types.search import PgstacSearch
 from stac_fastapi.pgstac.utils import format_datetime_range
 from stac_fastapi.types.core import Relations
-from stac_fastapi.types.errors import InvalidQueryParameter
 from stac_fastapi.types.requests import get_base_url
 from stac_fastapi.types.rfc3339 import DateTimeType
 from stac_fastapi.types.stac import (
@@ -63,8 +61,7 @@ from eoapi.stac.constants import (
     CACHE_KEY_SEARCH,
 )
 from eoapi.stac.logs import get_custom_dimensions
-
-# from eo_catalog.stac.utils.text_filter import apply_text_filter
+from eoapi.stac.models import CollectionSearchPagingLinks
 
 logger = logging.getLogger(__name__)
 
@@ -89,52 +86,95 @@ class EOCClient(CoreCrudClient):
 
         return await cached_result(_fetch, CACHE_KEY_LANDING, request)
 
-    async def _collection_search_base(  # noqa: C901
+    async def all_collections(  # noqa: C901
         self,
-        search_request: PgstacSearch,
         request: Request,
+        # Extensions
+        ids: Optional[List[str]] = None,
+        bbox: Optional[BBox] = None,
+        datetime: Optional[DateTimeType] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        query: Optional[str] = None,
+        fields: Optional[List[str]] = None,
+        sortby: Optional[str] = None,
+        filter: Optional[str] = None,
+        filter_lang: Optional[str] = None,
+        q: Optional[List[str]] = None,
+        **kwargs: Any,
     ) -> Collections:
-        """Cross catalog collectons search (GET).
-
-        Called with `GET /collections`.
-
-        Args:
-            search_request: search request parameters.
-
-        Returns:
-            All collections which match the search criteria.
+        """Cross catalog search (GET).
+        Override from stac-fastapi-pgstac to cache result and support pagination with collection-search.
+        Can be simplified once https://github.com/stac-utils/stac-fastapi-pgstac/pull/155.
         """
+
+        # filter ids depending on the user scope
+        collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
+        if not ids:
+            ids = collections_with_scopes
+        elif collections_with_scopes:
+            ids = list(set(collections_with_scopes) & set(ids))
+        # don't return the scope of the collection
+        if not fields:
+            fields = []
+        fields.append("-scope")
+
+        clean_args = {}
+        if self.extension_is_enabled("CollectionSearchExtensionWithIds"):
+            base_args: dict[str, Any] = {
+                "ids": ids,
+                "bbox": bbox,
+                "limit": limit,
+                "offset": offset,
+                "query": orjson.loads(unquote_plus(query)) if query else query,
+                "q": q,
+            }
+
+            clean_args = clean_search_args(
+                base_args=base_args,
+                datetime=datetime,
+                fields=fields,
+                sortby=sortby,
+                filter_query=filter,
+                filter_lang=filter_lang,
+            )
+
+        json_args = json.dumps(clean_args, default=list)
 
         async def _fetch() -> Collections:
             base_url = get_base_url(request)
-            search_request_json = search_request.model_dump_json(exclude_none=True, by_alias=True)
 
-            try:
+            next_link: Optional[Dict[str, Any]] = None
+            prev_link: Optional[Dict[str, Any]] = None
+            collections_result: Collections
+
+            if self.extension_is_enabled("CollectionSearchExtensionWithIds"):
                 async with request.app.state.get_connection(request, "r") as conn:
                     q, p = render(
                         """
                         SELECT * FROM collection_search(:req::text::jsonb);
                         """,
-                        req=search_request_json,
+                        req=json_args,
                     )
-                    collections_result: Collections = await conn.fetchval(q, *p)
-            except InvalidDatetimeFormatError as e:
-                raise InvalidQueryParameter(f"Datetime parameter {search_request.datetime} is invalid.") from e
+                    collections_result = await conn.fetchval(q, *p)
 
-            next: Optional[str] = None
-            prev: Optional[str] = None
-
-            # commented for the moment because the pagination is not working for collection search
-            # if links := collections_result.get("links"):
-            #     for link in links:
-            #         if link.get("rel") == "prev":
-            #             prev = link
-            #         elif link.get("rel") == "next":
-            #             next = link
-            #     links = [link for link in links if link.get("rel") not in ["prev", "next"]]
+                if links := collections_result.get("links"):
+                    for link in links:
+                        if link["rel"] == "next":
+                            next_link = link
+                        elif link["rel"] == "prev":
+                            prev_link = link
+            else:
+                async with request.app.state.get_connection(request, "r") as conn:
+                    cols = await conn.fetchval(
+                        """
+                        SELECT * FROM all_collections();
+                        """
+                    )
+                    collections_result = {"collections": cols, "links": []}
 
             linked_collections: List[Collection] = []
-            collections = collections_result["collections"]
+            collections = collections_result.get("collections")
             if collections is not None and len(collections) > 0:
                 for c in collections:
                     coll = Collection(**c)
@@ -154,10 +194,10 @@ class EOCClient(CoreCrudClient):
 
                     linked_collections.append(coll)
 
-            links = await PagingLinks(
+            links = await CollectionSearchPagingLinks(
                 request=request,
-                next=next,
-                prev=prev,
+                next=next_link,
+                prev=prev_link,
             ).get_links()
 
             return Collections(
@@ -165,80 +205,21 @@ class EOCClient(CoreCrudClient):
                 links=links,
             )
 
-        search_json = search_request.model_dump_json()
-
         settings: Settings = request.app.state.settings
 
         if settings.otel_enabled:
             from eoapi.stac.middlewares.tracing import add_stac_attributes_from_search
 
-            add_stac_attributes_from_search(search_json, request)
+            add_stac_attributes_from_search(clean_args, request)
 
         logger.info(
             "STAC: Collection search body",
-            extra=get_custom_dimensions({"search_body": search_json}, request),
+            extra=get_custom_dimensions({"search_body": clean_args}, request),
         )
 
-        hashed_search = hash(search_json)
+        hashed_search = hash(json_args)
         cache_key = f"{CACHE_KEY_COLLECTIONS}:{hashed_search}"
         return await cached_result(_fetch, cache_key, request)
-
-    async def all_collections(  # noqa: C901
-        self,
-        request: Request,
-        # Extensions
-        ids: Optional[List[str]] = None,
-        bbox: Optional[BBox] = None,
-        datetime: Optional[DateTimeType] = None,
-        limit: Optional[int] = None,
-        query: Optional[str] = None,
-        token: Optional[str] = None,
-        fields: Optional[List[str]] = None,
-        sortby: Optional[str] = None,
-        filter: Optional[str] = None,
-        filter_lang: Optional[str] = None,
-        q: Optional[List[str]] = None,
-        **kwargs: Any,
-    ) -> Collections:
-        """Cross catalog search (GET).
-        Override from stac-fastapi-pgstac to cache result and support collection-search.
-        Can be simplified once https://github.com/stac-utils/stac-fastapi-pgstac/pull/136 is merged.
-        """
-        # filter ids depending on the user scope
-        collections_with_scopes = get_collections_for_user_scope(request, EOCClient.oidc_auth)
-        if not ids:
-            ids = collections_with_scopes
-        elif collections_with_scopes:
-            ids = list(set(collections_with_scopes) & set(ids))
-        # don't return the scope of the collection
-        if not fields:
-            fields = []
-        fields.append("-scope")
-        base_args = {
-            "ids": ids,
-            "bbox": bbox,
-            "limit": limit,
-            "token": token,
-            "query": orjson.loads(unquote_plus(query)) if query else query,
-            "q": q,
-        }
-
-        clean = clean_search_args(
-            base_args=base_args,
-            datetime=datetime,
-            fields=fields,
-            sortby=sortby,
-            filter=filter,
-            filter_lang=filter_lang,
-        )
-
-        # Do the request
-        try:
-            search_request = self.post_request_model(**clean)
-        except ValidationError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid parameters provided {e}") from e
-
-        return await self._collection_search_base(search_request, request=request)
 
     async def get_collection(
         self,
@@ -382,15 +363,17 @@ def clean_search_args(  # noqa: C901
     datetime: Optional[DateTimeType] = None,
     fields: Optional[List[str]] = None,
     sortby: Optional[str] = None,
-    filter: Optional[str] = None,
+    filter_query: Optional[str] = None,
     filter_lang: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Clean up search arguments to match format expected by pgstac"""
-    if filter:
+    if filter_query:
         if filter_lang == "cql2-text":
-            ast = parse_cql2_text(filter)
-            base_args["filter"] = orjson.loads(to_cql2(ast))
-            base_args["filter-lang"] = "cql2-json"
+            filter_query = to_cql2(parse_cql2_text(filter_query))
+            filter_lang = "cql2-json"
+
+        base_args["filter"] = orjson.loads(filter_query)
+        base_args["filter_lang"] = filter_lang
 
     if datetime:
         base_args["datetime"] = format_datetime_range(datetime)
