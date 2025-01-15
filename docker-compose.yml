@@ -154,11 +154,7 @@ services:
 
   database:
     container_name: stac-db
-    image: pgstac
-    build:
-      context: ./third_party/pgstac
-      dockerfile: docker/pgstac/Dockerfile
-      target: pgstac
+    image: ghcr.io/stac-utils/pgstac:v0.9.2
     environment:
       - POSTGRES_USER=username
       - POSTGRES_PASSWORD=password
