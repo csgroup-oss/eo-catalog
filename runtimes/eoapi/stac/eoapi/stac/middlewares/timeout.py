@@ -10,6 +10,7 @@ from functools import wraps
 from typing import Any, Callable
 
 from fastapi.applications import FastAPI
+from fastapi.dependencies.models import Dependant
 from fastapi.dependencies.utils import (
     get_body_field,
     get_dependant,
@@ -68,7 +69,15 @@ def add_timeout(app: FastAPI, timeout_seconds: float) -> None:
                     0,
                     get_parameterless_sub_dependant(depends=depends, path=route.path_format),
                 )
-            route.body_field = get_body_field(
-                flat_dependant=route.dependant, name=route.unique_id, embed_body_fields=True
+
+            if not route.dependant.body_params:
+                flat_dependant = Dependant()
+                for depends in route.dependant.dependencies:
+                    flat_dependant.body_params.extend(depends.body_params)
+            else:
+                flat_dependant = route.dependant
+            route.body_field = (
+                get_body_field(flat_dependant=flat_dependant, name=route.unique_id, embed_body_fields=True)
+                or route.body_field
             )
             route.app = request_response(route.get_route_handler())

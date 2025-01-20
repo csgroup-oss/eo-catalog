@@ -1,4 +1,4 @@
-# Copyright 2024, CS GROUP - France, https://www.csgroup.eu/
+# Copyright 2024-2025, CS GROUP - France, https://www.csgroup.eu/
 """eocatalog.stac app."""
 
 import logging
@@ -17,6 +17,7 @@ from stac_fastapi.api.models import (
     create_post_request_model,
     create_request_model,
 )
+from stac_fastapi.api.openapi import update_openapi
 from stac_fastapi.extensions.core import (
     FieldsExtension,
     FilterExtension,
@@ -136,9 +137,7 @@ get_request_model = create_get_request_model(extensions)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI Lifespan."""
-    logger.debug("Connecting to db...")
     await connect_to_db(app)
-    logger.debug("Connected to db.")
 
     if settings.redis_enabled:
         from eoapi.stac.redis import connect_to_redis
@@ -147,13 +146,11 @@ async def lifespan(app: FastAPI):
 
     # add restrictions to endpoints
     if auth_settings.openid_configuration_url:
-        logger.debug("Add access restrictions to transaction endpoints")
+        logger.info("Add access restrictions to transaction endpoints")
         await lock_transaction_endpoints()
     yield
 
-    logger.debug("Closing db connections...")
     await close_db_connection(app)
-    logger.debug("Closed db connection.")
 
 
 # Middlewares
@@ -172,19 +169,21 @@ if settings.otel_enabled:
 
     middlewares.append(Middleware(TraceMiddleware, service_name=settings.otel_service_name))
 
+fastapp = FastAPI(
+    lifespan=lifespan,
+    openapi_url=settings.openapi_url,
+    docs_url=settings.docs_url,
+    redoc_url=None,
+    swagger_ui_init_oauth={
+        "clientId": auth_settings.client_id,
+        "usePkceWithAuthorizationCodeGrant": auth_settings.use_pkce,
+    },
+    root_path=settings.root_path,
+    dependencies=[Depends(verify_scope_for_collection)],
+)
+
 api = StacApi(
-    app=FastAPI(
-        lifespan=lifespan,
-        openapi_url=settings.openapi_url,
-        docs_url=settings.docs_url,
-        redoc_url=None,
-        swagger_ui_init_oauth={
-            "clientId": auth_settings.client_id,
-            "usePkceWithAuthorizationCodeGrant": auth_settings.use_pkce,
-        },
-        root_path=settings.app_root_path,
-        dependencies=[Depends(verify_scope_for_collection)],
-    ),
+    app=update_openapi(fastapp),
     settings=settings,
     extensions=extensions + [collection_search_extension] if collection_search_extension else extensions,
     client=EOCClient(post_request_model=post_request_model),  # type: ignore
