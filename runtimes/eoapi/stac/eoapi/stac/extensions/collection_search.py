@@ -17,7 +17,6 @@
 # limitations under the License.
 """Collection-Search extension."""
 
-import warnings
 from typing import List, Optional, Type, Union
 
 import attr
@@ -88,7 +87,7 @@ class CollectionSearchExtensionWithIds(CollectionSearchExtension):
         schema_href: Optional[str] = None,
     ) -> "CollectionSearchExtensionWithIds":
         """Create CollectionSearchExtension object from extensions."""
-        supported_extensions = {
+        known_extension_conformances = {
             "FreeTextExtension": ConformanceClasses.FREETEXT,
             "FreeTextAdvancedExtension": ConformanceClasses.FREETEXT,
             "QueryExtension": ConformanceClasses.QUERY,
@@ -101,13 +100,7 @@ class CollectionSearchExtensionWithIds(CollectionSearchExtension):
             ConformanceClasses.BASIS,
         ]
         for ext in extensions:
-            conf = supported_extensions.get(ext.__class__.__name__, None)
-            if not conf:
-                warnings.warn(
-                    f"Conformance class for `{ext.__class__.__name__}` extension not found.",  # noqa: E501
-                    UserWarning,
-                )
-            else:
+            if conf := known_extension_conformances.get(ext.__class__.__name__, None):
                 conformance_classes.append(conf)
 
         get_request_model = _create_request_model(
