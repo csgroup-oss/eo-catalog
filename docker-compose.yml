@@ -28,7 +28,7 @@ services:
       - PYTHONUNBUFFERED=1
       # Application
       - APP_HOST
-      - APP_PORT
+      - APP_PORT=8081
       - POSTGRES_USER=username
       - POSTGRES_PASS=password
       - POSTGRES_DBNAME=postgis
