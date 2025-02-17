@@ -5,6 +5,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+import jinja2
 from fastapi import Depends, FastAPI
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute
@@ -19,14 +20,21 @@ from stac_fastapi.api.models import (
 )
 from stac_fastapi.api.openapi import update_openapi
 from stac_fastapi.extensions.core import (
+    CollectionSearchExtension,
+    CollectionSearchFilterExtension,
     FieldsExtension,
-    FilterExtension,
-    FreeTextAdvancedExtension,
+    FreeTextExtension,
+    ItemCollectionFilterExtension,
     OffsetPaginationExtension,
+    SearchFilterExtension,
     SortExtension,
     TokenPaginationExtension,
     TransactionExtension,
 )
+from stac_fastapi.extensions.core.fields import FieldsConformanceClasses
+from stac_fastapi.extensions.core.free_text import FreeTextConformanceClasses
+from stac_fastapi.extensions.core.query import QueryConformanceClasses
+from stac_fastapi.extensions.core.sort import SortConformanceClasses
 from stac_fastapi.extensions.third_party import BulkTransactionExtension
 from stac_fastapi.pgstac.db import close_db_connection, connect_to_db
 from stac_fastapi.pgstac.extensions import QueryExtension
@@ -49,7 +57,7 @@ from eoapi.stac.auth import (
 )
 from eoapi.stac.config import Settings
 from eoapi.stac.core import EOCClient
-from eoapi.stac.extensions.collection_search import CollectionSearchExtensionWithIds
+from eoapi.stac.extensions.collection_search import CollectionSearchIdsExtension
 from eoapi.stac.extensions.filter import FiltersClient
 from eoapi.stac.extensions.titiller import TiTilerExtension
 from eoapi.stac.extensions.transaction import EoApiTransactionsClient
@@ -57,90 +65,126 @@ from eoapi.stac.logs import init_logging
 from eoapi.stac.middlewares.timeout import add_timeout
 from eoapi.stac.utils import fetch_all_collections_with_scopes
 
-try:
-    from importlib.resources import files as resources_files  # type: ignore
-except ImportError:
-    # Try backported to PY<39 `importlib_resources`.
-    from importlib_resources import files as resources_files  # type: ignore
+PACKAGE_NAME = __package__ or "eoapi.stac"
 
-templates = Jinja2Templates(directory=str(resources_files(__package__) / "templates"))
+jinja2_env = jinja2.Environment(
+    loader=jinja2.ChoiceLoader([jinja2.PackageLoader(PACKAGE_NAME, "templates")])
+)
+templates = Jinja2Templates(env=jinja2_env)
+
 auth_settings = EoApiOpenIdConnectSettings()
-settings = Settings(enable_response_models=True)
+settings = Settings(enable_response_models=True)  # type: ignore[ReportCallIssue]
 
 # Logs
 init_logging(service_name=settings.otel_service_name, debug=settings.debug)
 logger = logging.getLogger(__name__)
 
-# Extensions
-extensions_map: dict[str, ApiExtension] = {
+application_extensions_map: dict[str, ApiExtension] = {
     "transaction": TransactionExtension(
         client=EoApiTransactionsClient(),
         settings=settings,
         response_class=ORJSONResponse,
     ),
-    "query": QueryExtension(),
-    "sort": SortExtension(),
-    "fields": FieldsExtension(),
-    "pagination": TokenPaginationExtension(),
-    "filter": FilterExtension(client=FiltersClient()),
     "bulk_transactions": BulkTransactionExtension(client=BulkTransactionsClient()),
-    "freetext_advanced": FreeTextAdvancedExtension(),
 }
 
-if settings.titiler_endpoint:
-    extensions_map["titiler"] = TiTilerExtension(titiler_endpoint=settings.titiler_endpoint)
-
-
-# some extensions are supported in combination with the collection search extension
-collection_extensions_map: dict[str, ApiExtension] = {
+search_extensions_map: dict[str, ApiExtension] = {
     "query": QueryExtension(),
     "sort": SortExtension(),
     "fields": FieldsExtension(),
-    "filter": FilterExtension(client=FiltersClient()),
+    "filter": SearchFilterExtension(client=FiltersClient()),
+    "pagination": TokenPaginationExtension(),
+}
+
+cs_extensions_map: dict[str, ApiExtension] = {
+    "query": QueryExtension(conformance_classes=[QueryConformanceClasses.COLLECTIONS]),
+    "sort": SortExtension(conformance_classes=[SortConformanceClasses.COLLECTIONS]),
+    "fields": FieldsExtension(conformance_classes=[FieldsConformanceClasses.COLLECTIONS]),
+    "filter": CollectionSearchFilterExtension(client=FiltersClient()),
+    "free_text": FreeTextExtension(
+        conformance_classes=[FreeTextConformanceClasses.COLLECTIONS],
+    ),
     "pagination": OffsetPaginationExtension(),
-    "freetext_advanced": FreeTextAdvancedExtension(),
+    "ids": CollectionSearchIdsExtension(),
+}
+
+itm_col_extensions_map: dict[str, ApiExtension] = {
+    "query": QueryExtension(
+        conformance_classes=[QueryConformanceClasses.ITEMS],
+    ),
+    "sort": SortExtension(
+        conformance_classes=[SortConformanceClasses.ITEMS],
+    ),
+    "fields": FieldsExtension(conformance_classes=[FieldsConformanceClasses.ITEMS]),
+    "filter": ItemCollectionFilterExtension(client=FiltersClient()),
+    "pagination": TokenPaginationExtension(),
+}
+
+known_extensions = {
+    *application_extensions_map.keys(),
+    *search_extensions_map.keys(),
+    *cs_extensions_map.keys(),
+    *itm_col_extensions_map.keys(),
+    "collection_search",
 }
 
 enabled_extensions = (
     os.environ["ENABLED_EXTENSIONS"].split(",")
     if "ENABLED_EXTENSIONS" in os.environ
-    else list(extensions_map.keys()) + ["collection_search"]
+    else known_extensions
 )
-extensions = [extension for key, extension in extensions_map.items() if key in enabled_extensions]
 
-items_get_request_model = (
-    create_request_model(
+application_extensions = [
+    extension for key, extension in application_extensions_map.items() if key in enabled_extensions
+]
+
+if settings.titiler_endpoint:
+    application_extensions.append(TiTilerExtension(titiler_endpoint=settings.titiler_endpoint))
+
+
+# /search models
+search_extensions = [
+    extension for key, extension in search_extensions_map.items() if key in enabled_extensions
+]
+post_request_model = create_post_request_model(
+    search_extensions,
+    base_model=PgstacSearch,  # type: ignore[reportArgumentType]
+)
+get_request_model = create_get_request_model(search_extensions)
+application_extensions.extend(search_extensions)
+
+# /collections/{collectionId}/items model
+items_get_request_model = ItemCollectionUri  # pylint: disable=invalid-name
+itm_col_extensions = [
+    extension for key, extension in itm_col_extensions_map.items() if key in enabled_extensions
+]
+if itm_col_extensions:
+    items_get_request_model = create_request_model(
         model_name="ItemCollectionUri",
-        base_model=ItemCollectionUri,
-        mixins=[TokenPaginationExtension().GET],
+        base_model=ItemCollectionUri,  # type: ignore[reportArgumentType]
+        extensions=itm_col_extensions,
         request_type="GET",
     )
-    if any(isinstance(ext, TokenPaginationExtension) for ext in extensions)
-    else ItemCollectionUri
-)
+    application_extensions.extend(itm_col_extensions)
 
-
-collection_search_extension = (
-    CollectionSearchExtensionWithIds.from_extensions(
-        [extension for key, extension in collection_extensions_map.items() if key in enabled_extensions]
-    )
-    if "collection_search" in enabled_extensions
-    else None
-)
-
-collections_get_request_model = collection_search_extension.GET if collection_search_extension else EmptyRequest
-
-post_request_model = create_post_request_model(extensions, base_model=PgstacSearch)
-get_request_model = create_get_request_model(extensions)
+# /collections model
+collections_get_request_model = EmptyRequest  # pylint: disable=invalid-name
+if "collection_search" in enabled_extensions:
+    cs_extensions = [
+        extension for key, extension in cs_extensions_map.items() if key in enabled_extensions
+    ]
+    collection_search_extension = CollectionSearchExtension.from_extensions(cs_extensions)
+    collections_get_request_model = collection_search_extension.GET
+    application_extensions.append(collection_search_extension)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # pylint: disable=redefined-outer-name
     """FastAPI Lifespan."""
     await connect_to_db(app)
 
     if settings.redis_enabled:
-        from eoapi.stac.redis import connect_to_redis
+        from eoapi.stac.redis import connect_to_redis  # pylint: disable=import-outside-toplevel
 
         await connect_to_redis(app)
 
@@ -169,29 +213,32 @@ if settings.otel_enabled:
 
     middlewares.append(Middleware(TraceMiddleware, service_name=settings.otel_service_name))
 
-fastapp = FastAPI(
-    lifespan=lifespan,
-    openapi_url=settings.openapi_url,
-    docs_url=settings.docs_url,
-    redoc_url=None,
-    swagger_ui_init_oauth={
-        "clientId": auth_settings.client_id,
-        "usePkceWithAuthorizationCodeGrant": auth_settings.use_pkce,
-    },
-    root_path=settings.root_path,
-    dependencies=[Depends(verify_scope_for_collection)],
-)
-
 api = StacApi(
-    app=update_openapi(fastapp),
+    app=update_openapi(
+        FastAPI(
+            lifespan=lifespan,
+            openapi_url=settings.openapi_url,
+            docs_url=settings.docs_url,
+            redoc_url=None,
+            swagger_ui_init_oauth={
+                "clientId": auth_settings.client_id,
+                "usePkceWithAuthorizationCodeGrant": auth_settings.use_pkce,
+            },
+            root_path=settings.root_path,
+            title=settings.stac_fastapi_title,
+            version=settings.stac_fastapi_version,
+            description=settings.stac_fastapi_description,
+            dependencies=[Depends(verify_scope_for_collection)],
+        )
+    ),
     settings=settings,
-    extensions=extensions + [collection_search_extension] if collection_search_extension else extensions,
-    client=EOCClient(post_request_model=post_request_model),  # type: ignore
-    items_get_request_model=items_get_request_model,
-    search_get_request_model=get_request_model,
-    search_post_request_model=post_request_model,
-    collections_get_request_model=collections_get_request_model,
+    extensions=application_extensions,
+    client=EOCClient(pgstac_search_model=post_request_model),  # type: ignore
     response_class=ORJSONResponse,
+    items_get_request_model=items_get_request_model,  # type: ignore[reportArgumentType]
+    search_get_request_model=get_request_model,  # type: ignore[reportArgumentType]
+    search_post_request_model=post_request_model,  # type: ignore[reportArgumentType]
+    collections_get_request_model=collections_get_request_model,  # type: ignore[reportArgumentType]
     middlewares=middlewares,
 )
 app = api.app
@@ -213,6 +260,7 @@ async def viewer_page(request: Request):
 
 
 async def lock_transaction_endpoints():
+    """Lock transaction endpoints."""
     # get scopes for collections
     request = Request({"type": "http", "app": app})
     # get scopes for collections which will be used in dependencies
@@ -250,7 +298,7 @@ async def lock_transaction_endpoints():
 def run() -> None:
     """Run app from command line using uvicorn if available."""
     try:
-        import uvicorn
+        import uvicorn  # pylint: disable=import-outside-toplevel
 
         uvicorn.run(
             "eoapi.stac.app:app",

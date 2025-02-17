@@ -1,4 +1,4 @@
-# Copyright (c) 2024, CS GROUP - France, https://csgroup.eu
+# Copyright (c) 2024, CS GROUP - France, https://cs-soprasteria.com
 
 # This file is part of EO Catalog project:
 
@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from buildpg import render
@@ -38,15 +38,17 @@ collections_list = Collections()
 
 
 def request_to_path(request: Request) -> str:
-    parsed_url = urlparse(f"{request.url}")
+    """Extract path from request URL."""
+    parsed_url = urlparse(str(request.url))
     return parsed_url.path
 
 
 def get_request_ip(request: Request) -> str:
     """Gets the IP address of the request."""
 
-    ip_header = request.headers.get(X_ORIGINAL_FORWARDED_FOR) or request.headers.get(X_FORWARDED_FOR)
-
+    ip_header = request.headers.get(X_ORIGINAL_FORWARDED_FOR) or request.headers.get(
+        X_FORWARDED_FOR
+    )
     # If multiple IPs, take the last one
     return ip_header.split(",")[-1] if ip_header else ""
 
@@ -63,7 +65,7 @@ async def fetch_all_collections_with_scopes(request: Request) -> Collections:
     """
 
     async def _fetch() -> Collections:
-        search_request = {"fields": {"include": ["id", "scope"]}, "limit": 100000}
+        search_request: dict[str, Any] = {"fields": {"include": ["id", "scope"]}, "limit": 100000}
         async with request.app.state.get_connection(request, "r") as conn:
             q, p = render(
                 """
@@ -78,7 +80,7 @@ async def fetch_all_collections_with_scopes(request: Request) -> Collections:
     settings: Settings = request.app.state.settings
 
     if settings.redis_enabled:
-        from eoapi.stac.redis import cached_result
+        from eoapi.stac.redis import cached_result  # pylint: disable=import-outside-toplevel
 
         return await cached_result(_fetch, cache_key, request)
     return await _fetch()

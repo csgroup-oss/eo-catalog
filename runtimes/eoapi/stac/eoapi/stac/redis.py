@@ -1,7 +1,8 @@
 # Copyright 2024, CS GROUP - France, https://www.csgroup.eu/
 """
 Caching with Redis.
-Adapted from https://github.com/microsoft/planetary-computer-apis/blob/main/pccommon/pccommon/redis.py.
+Adapted from
+https://github.com/microsoft/planetary-computer-apis/blob/main/pccommon/pccommon/redis.py.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from typing import (
     Literal,
     TypedDict,
     TypeVar,
+    Union,
 )
 
 import orjson
@@ -28,7 +30,7 @@ from stac_fastapi.pgstac.types.base_item_cache import BaseItemCache
 from eoapi.stac.constants import CACHE_KEY_BASE_ITEM
 from eoapi.stac.logs import get_custom_dimensions  # Assuming you keep using your logging setup
 
-Redis = RedisCluster | RedisClient
+Redis = Union[RedisCluster, RedisClient]
 
 if TYPE_CHECKING:
     from eoapi.stac.config import Settings
@@ -68,7 +70,7 @@ async def connect_to_redis(app: FastAPI) -> None:
     else:
         app.state.redis = RedisClient(**redis_params)
 
-    logger.info(f"Connected to Redis on {settings.redis_hostname}:{settings.redis_port}")
+    logger.info("Connected to Redis on %s:%s", settings.redis_hostname, settings.redis_port)
 
 
 async def cached_result(
@@ -78,7 +80,7 @@ async def cached_result(
 ) -> T:
     """Either get the result from redis or run the function and cache the result."""
     settings: Settings = request.app.state.settings
-    r: Redis  # type: ignore
+    r: Redis
 
     # GET key from cache
     try:
@@ -98,11 +100,12 @@ async def cached_result(
                         request,
                     ),
                 )
-                return orjson.loads(cached)
-    except Exception as e:
+                return orjson.loads(cached)  # pylint: disable=no-member
+    except Exception as e:  # pylint: disable=broad-exception-caught
         # Don't fail on redis failure
         logger.error(
-            f"GET cache: {e}",
+            "GET cache: %s",
+            e,
             extra=get_custom_dimensions({"cache_key": cache_key}, request),
         )
         if settings.debug:
@@ -121,11 +124,17 @@ async def cached_result(
 
     # SET key in cache
     try:
-        await r.set(cache_key, orjson.dumps(result), settings.redis_ttl)  # type: ignore
-    except Exception as e:
+        r = request.app.state.redis
+        await r.set(
+            cache_key,
+            orjson.dumps(result),  # pylint: disable=no-member
+            settings.redis_ttl,
+        )
+    except Exception as e:  # pylint: disable=broad-exception-caught
         # Don't fail on redis failure
         logger.error(
-            f"SET cache: {e}",
+            "SET cache: %s",
+            e,
             extra=get_custom_dimensions({"cache_key": cache_key}, request),
         )
         if settings.debug:

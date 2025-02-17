@@ -1,4 +1,4 @@
-# Copyright (c) 2024, CS GROUP - France, https://csgroup.eu
+# Copyright (c) 2024, CS GROUP - France, https://cs-soprasteria.com
 """TiTiler extension."""
 
 from typing import Optional
@@ -35,8 +35,12 @@ class TiTilerExtension(ApiExtension):
             request: Request,
             collection_id: str = Path(description="Collection ID"),
             item_id: str = Path(description="Item ID"),
-            tile_format: Optional[str] = Query(None, description="Output image type. Default is auto."),
-            tile_scale: int = Query(1, gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."),
+            tile_format: Optional[str] = Query(
+                None, description="Output image type. Default is auto."
+            ),
+            tile_scale: int = Query(
+                1, gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
+            ),
             minzoom: Optional[int] = Query(None, description="Overwrite default minzoom."),
             maxzoom: Optional[int] = Query(None, description="Overwrite default maxzoom."),
             assets: Optional[str] = Query(  # noqa
@@ -65,7 +69,11 @@ class TiTilerExtension(ApiExtension):
                 "minzoom",
                 "maxzoom",
             ]
-            qs = [(key, value) for (key, value) in request.query_params._list if key.lower() not in qs_key_to_remove]
+            qs = [
+                (key, value)
+                for (key, value) in request.query_params._list
+                if key.lower() not in qs_key_to_remove
+            ]
             return RedirectResponse(
                 f"{self.titiler_endpoint}/collections/{collection_id}/items/{item_id}/tilejson.json?{urlencode(qs)}"
             )

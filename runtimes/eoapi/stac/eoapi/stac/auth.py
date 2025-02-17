@@ -1,4 +1,4 @@
-# Copyright (c) 2024, CS GROUP - France, https://csgroup.eu
+# Copyright (c) 2024, CS GROUP - France, https://cs-soprasteria.com
 
 # This file is part of EO Catalog project:
 
@@ -31,6 +31,8 @@ from eoapi.auth_utils import OpenIdConnectAuth
 
 
 class EoApiOpenIdConnectSettings(BaseSettings):
+    """EoApiOpenIdConnectSettings class."""
+
     # Swagger UI config for Authorization Code Flow
     client_id: str = ""
     use_pkce: bool = True
@@ -47,6 +49,8 @@ class EoApiOpenIdConnectSettings(BaseSettings):
 
 
 class CollectionsScopes:
+    """CollectionsSCopes class."""
+
     collection_scopes: Dict[str, str] = {}
 
     def __init__(self, collections: Collections, scope_var: str):
@@ -56,8 +60,8 @@ class CollectionsScopes:
 
     def set_scopes_for_collections(self):
         """
-        fills the class variable collection_scopes with the scopes given in self.collections using the
-        variable self.scope_var to find the scope in the collection metadata
+        fills the class variable collection_scopes with the scopes given in self.collections using
+        the variable self.scope_var to find the scope in the collection metadata
         """
         scopes = {}
         for collection in self.collections["collections"]:
@@ -68,7 +72,9 @@ class CollectionsScopes:
         CollectionsScopes.collection_scopes = scopes
 
 
-def oidc_auth_from_settings(cls, settings: EoApiOpenIdConnectSettings) -> OpenIdConnectAuth | None:
+def oidc_auth_from_settings(
+    cls: type[OpenIdConnectAuth], settings: EoApiOpenIdConnectSettings
+) -> OpenIdConnectAuth | None:
     """
     creates an OpenIdConnectAuth object from the given settings
     Args:
@@ -79,7 +85,9 @@ def oidc_auth_from_settings(cls, settings: EoApiOpenIdConnectSettings) -> OpenId
         OpenIdConnectAuth object
     """
     if settings.openid_configuration_url:
-        return OpenIdConnectAuth(**settings.model_dump(include=cls.__dataclass_fields__.keys()))
+        return OpenIdConnectAuth(
+            **settings.model_dump(include=set(cls.__dataclass_fields__.keys()))
+        )
 
     return None
 
@@ -89,7 +97,8 @@ def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth)
     retrieves the scopes of the user based on the given request
     Args:
         request: the scopes will be retrieved from the token in the headers of the starlette request
-        oidc_auth: authentication object from which the signing key and the allowed audiences are retrieved
+        oidc_auth: authentication object from which the signing key and the allowed audiences are
+            retrieved
 
     Returns:
         List of the user scopes
@@ -106,7 +115,8 @@ def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth)
             token,
             key,
             algorithms=["RS256"],
-            # NOTE: Audience validation MUST match audience claim if set in token (https://pyjwt.readthedocs.io/en/stable/changelog.html?highlight=audience#id40)
+            # NOTE: Audience validation MUST match audience claim if set in token
+            # (https://pyjwt.readthedocs.io/en/stable/changelog.html?highlight=audience#id40)
             audience=oidc_auth.allowed_jwt_audiences,
         )
     except (jwt.exceptions.InvalidTokenError, jwt.exceptions.DecodeError) as e:
@@ -120,7 +130,9 @@ def get_user_scopes_from_request(request: Request, oidc_auth: OpenIdConnectAuth)
 
 def verify_scope_for_collection(request: Request, collection_id: str = ""):
     """
-    checks if the user scopes from the request contain the scope necessary to access the collection with the given id
+    checks if the user scopes from the request contain the scope necessary to access the collection
+    with the given id
+
     Args:
         request: the scopes will be retrieved from the token in the headers of the starlette request
         collection_id: id of the collection for which the scope should be checked
@@ -131,6 +143,8 @@ def verify_scope_for_collection(request: Request, collection_id: str = ""):
         return
     auth_settings = EoApiOpenIdConnectSettings()
     oidc_auth = oidc_auth_from_settings(OpenIdConnectAuth, auth_settings)
+    if not oidc_auth:
+        return
     scopes = get_user_scopes_from_request(request, oidc_auth)
     collection_scopes = CollectionsScopes.collection_scopes
     if collection_id in collection_scopes and collection_scopes[collection_id]:
@@ -142,12 +156,17 @@ def verify_scope_for_collection(request: Request, collection_id: str = ""):
             )
 
 
-def get_collections_for_user_scope(request: Request, oidc_auth: OpenIdConnectAuth) -> Optional[List[str]]:
+def get_collections_for_user_scope(
+    request: Request, oidc_auth: Optional[OpenIdConnectAuth] = None
+) -> Optional[List[str]]:
     """
-    returns the collections which can be accessed with the user scopes from the authorization token of the given request
+    returns the collections which can be accessed with the user scopes from the authorization token
+    of the given request
+
     Args:
         request: the scopes will be retrieved from the token in the headers of the starlette request
-        oidc_auth: authentication object from which the signing key and the allowed audiences are retrieved
+        oidc_auth: authentication object from which the signing key and the allowed audiences are
+            retrieved
 
     Returns:
         a list of the ids of the collections the user is allowed to access

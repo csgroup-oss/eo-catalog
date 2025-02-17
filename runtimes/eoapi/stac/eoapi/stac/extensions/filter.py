@@ -1,4 +1,4 @@
-# Copyright (c) 2024, CS GROUP - France, https://csgroup.eu
+# Copyright (c) 2024, CS GROUP - France, https://cs-soprasteria.com
 
 # This file is part of EO Catalog project:
 

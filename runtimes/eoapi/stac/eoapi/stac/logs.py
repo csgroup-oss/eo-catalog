@@ -1,6 +1,7 @@
 # Copyright 2024, CS GROUP - France, https://www.csgroup.eu/
 """Logging configuration.
-Adapted from https://github.com/microsoft/planetary-computer-apis/blob/main/pccommon/pccommon/logging.py.
+Adapted from
+https://github.com/microsoft/planetary-computer-apis/blob/main/pccommon/pccommon/logging.py.
 """
 
 from __future__ import annotations
@@ -94,7 +95,9 @@ def get_request_entity(request: Request) -> Union[str, None]:
     return request.headers.get(X_REQUEST_ENTITY) or request.query_params.get(QS_REQUEST_ENTITY)
 
 
-def get_custom_dimensions(dimensions: Dict[str, Any], request: Request) -> dict[str, dict[str, Any]]:
+def get_custom_dimensions(
+    dimensions: Dict[str, Any], request: Request
+) -> dict[str, dict[str, Any]]:
     """Merge the base dimensions with the given dimensions."""
     settings = request.app.state.settings
 

@@ -21,10 +21,12 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "stac-fastapi.api~=3.0.5",
-    "stac-fastapi.extensions~=3.0.5",
-    "stac-fastapi.types~=3.0.5",
-    "stac-fastapi.pgstac~=3.0",
+    "pydantic",
+    "stac_pydantic==3.1.*",
+    "stac-fastapi.api~=5.0",
+    "stac-fastapi.extensions~=5.0",
+    "stac-fastapi.types~=5.0",
+    "stac-fastapi.pgstac~=4.0",
     "jinja2>=2.11.2,<4.0.0",
     "starlette-cramjam>=0.3,<0.4",
     "importlib_resources>=1.1.0;python_version<'3.9'",
@@ -65,6 +67,7 @@ includes = ["eoapi/stac"]
 excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
 
 [tool.mypy]
+files = "eoapi/stac"
 ignore_missing_imports = true
 disallow_untyped_defs = true
 
@@ -78,7 +81,7 @@ env_files = [".env"]
 addopts = "-m \"mocked and not databaseConnection and not httpConnection\""
 
 [tool.ruff]
-line-length = 120
+line-length = 100
 target-version = "py38"
 
 [tool.ruff.format]

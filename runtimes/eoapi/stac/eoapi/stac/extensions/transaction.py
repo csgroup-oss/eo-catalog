@@ -1,4 +1,4 @@
-# Copyright (c) 2024, CS GROUP - France, https://csgroup.eu
+# Copyright (c) 2024, CS GROUP - France, https://cs-soprasteria.com
 
 # This file is part of EO Catalog project:
 
@@ -63,9 +63,9 @@ class EoApiTransactionsClient(TransactionsClient):
         async with request.app.state.get_connection(request, "w") as conn:
             await dbfunc(conn, "create_collection", collection)
 
-        collection["links"] = await CollectionLinks(collection_id=collection["id"], request=request).get_links(
-            extra_links=collection["links"]
-        )
+        collection["links"] = await CollectionLinks(
+            collection_id=collection["id"], request=request
+        ).get_links(extra_links=collection["links"])
 
         await _update_collection_scopes(request)
 

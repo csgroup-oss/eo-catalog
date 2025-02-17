@@ -12,8 +12,6 @@ from eoapi.stac.constants import DEFAULT_TTL
 class Settings(BaseSettings):
     """API settings"""
 
-    cors_origins: str = "*"
-    cors_methods: str = "GET,POST,OPTIONS"
     cachecontrol: str = "public, max-age=3600"
     debug: bool = False
 
@@ -35,12 +33,14 @@ class Settings(BaseSettings):
     otel_service_name: str = "eo-catalog-stac"
 
     @field_validator("cors_origins")
-    def parse_cors_origin(cls, v: str):
+    @classmethod
+    def parse_cors_origin(cls, v: str):  # pylint: disable=arguments-differ
         """Parse CORS origins."""
         return [origin.strip() for origin in v.split(",")]
 
     @field_validator("cors_methods")
-    def parse_cors_methods(cls, v: str):
+    @classmethod
+    def parse_cors_methods(cls, v: str):  # pylint: disable=arguments-differ
         """Parse CORS methods."""
         return [method.strip() for method in v.split(",")]
 
