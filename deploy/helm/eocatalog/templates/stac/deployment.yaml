@@ -122,6 +122,8 @@ spec:
             - |
               set -xe
               pypgstac pgready && pypgstac migrate
+              psql -U postgres -c 'GRANT pgstac_admin to "eo-catalogue";'
+              psql -U postgres -c 'ALTER DATABASE postgis SET search_path TO pgstac, public;'
           env:
             - name: PGUSER
               value: postgres
