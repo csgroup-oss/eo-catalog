@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "eocatalogue.stac" . }}
+  name: {{ include "eocatalog.stac" . }}
   namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" . | nindent 4 }}
     app.kubernetes.io/component: stac-api
@@ -31,8 +31,8 @@ spec:
       annotations: {{- include "common.tplvalues.render" (dict "value" .Values.stac.podAnnotations "context" $) | nindent 8 }}
       {{- end }}
     spec:
-      serviceAccountName: {{ include "eocatalogue.stac.serviceAccountName" . }}
-      {{- include "eocatalogue.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "eocatalog.stac.serviceAccountName" . }}
+      {{- include "eocatalog.imagePullSecrets" . | nindent 6 }}
       {{- if .Values.stac.hostAliases }}
       hostAliases: {{- include "common.tplvalues.render" (dict "value" .Values.stac.hostAliases "context" $) | nindent 8 }}
       {{- end }}
@@ -91,7 +91,7 @@ spec:
                 . /opt/bitnami/scripts/libos.sh
                 . /opt/bitnami/scripts/liblog.sh
                 check_redis_connection() {
-                  local result="$(redis-cli -h {{ include "eocatalogue.redisHost" . }} -p {{ include "eocatalogue.redisPort" . }} {{ .Values.stac.redisWait.extraArgs }} PING)"
+                  local result="$(redis-cli -h {{ include "eocatalog.redisHost" . }} -p {{ include "eocatalog.redisPort" . }} {{ .Values.stac.redisWait.extraArgs }} PING)"
                   if [[ "$result" != "PONG" ]]; then
                     false
                   fi
@@ -103,13 +103,13 @@ spec:
                 else
                     info "Connected to the Redis instance"
                 fi
-          {{- if include "eocatalogue.redis.auth.enabled" . }}
+          {{- if include "eocatalog.redis.auth.enabled" . }}
           env:
             - name: REDISCLI_AUTH
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "eocatalogue.redis.secretName" . }}
-                  key: {{ include "eocatalogue.redis.secretPasswordKey" . }}
+                  name: {{ include "eocatalog.redis.secretName" . }}
+                  key: {{ include "eocatalog.redis.secretPasswordKey" . }}
           {{- end }}
         {{- end }}
         {{- if .Values.stac.initDb }}
@@ -130,29 +130,29 @@ spec:
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "eocatalogue.databaseSecretName" . }}
-                  key: {{ include "eocatalogue.databaseSecretPostgresKey" . }}
+                  name: {{ include "eocatalog.databaseSecretName" . }}
+                  key: {{ include "eocatalog.databaseSecretPostgresKey" . }}
             - name: PGDATABASE
-              value: {{ include "eocatalogue.databaseName" . }}
+              value: {{ include "eocatalog.databaseName" . }}
             - name: PGPORT
-              value: {{ include "eocatalogue.databasePort" . }}
+              value: {{ include "eocatalog.databasePort" . }}
             - name: PGHOST
-              value: {{ include "eocatalogue.databaseHost" . }}
+              value: {{ include "eocatalog.databaseHost" . }}
             - name: POSTGRES_USER
               value: postgres
             - name: POSTGRES_PASS
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "eocatalogue.databaseSecretName" . }}
-                  key: {{ include "eocatalogue.databaseSecretPostgresKey" . }}
+                  name: {{ include "eocatalog.databaseSecretName" . }}
+                  key: {{ include "eocatalog.databaseSecretPostgresKey" . }}
             - name: POSTGRES_HOST_READER
-              value: {{ include "eocatalogue.databaseHost" . }}
+              value: {{ include "eocatalog.databaseHost" . }}
             - name: POSTGRES_HOST_WRITER
-              value: {{ include "eocatalogue.databaseHost" . }}
+              value: {{ include "eocatalog.databaseHost" . }}
             - name: POSTGRES_PORT
-              value: {{ include "eocatalogue.databasePort" . }}
+              value: {{ include "eocatalog.databasePort" . }}
             - name: POSTGRES_DBNAME
-              value: {{ include "eocatalogue.databaseName" . }}
+              value: {{ include "eocatalog.databaseName" . }}
         {{- end }}
       containers:
         - name: stac-api
@@ -233,20 +233,20 @@ spec:
             - name: REQUEST_TIMEOUT
               value: {{ .Values.stac.requestTimeout | quote }}
             - name: POSTGRES_USER
-              value: {{ include "eocatalogue.databaseUser" . }}
+              value: {{ include "eocatalog.databaseUser" . }}
             - name: POSTGRES_PASS
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "eocatalogue.databaseSecretName" . }}
-                  key: {{ include "eocatalogue.databaseSecretKey" . }}
+                  name: {{ include "eocatalog.databaseSecretName" . }}
+                  key: {{ include "eocatalog.databaseSecretKey" . }}
             - name: POSTGRES_HOST_READER
-              value: {{ include "eocatalogue.databaseHost" . }}
+              value: {{ include "eocatalog.databaseHost" . }}
             - name: POSTGRES_HOST_WRITER
-              value: {{ include "eocatalogue.databaseHostWriter" . }}
+              value: {{ include "eocatalog.databaseHostWriter" . }}
             - name: POSTGRES_PORT
-              value: {{ include "eocatalogue.databasePort" . }}
+              value: {{ include "eocatalog.databasePort" . }}
             - name: POSTGRES_DBNAME
-              value: {{ include "eocatalogue.databaseName" . }}
+              value: {{ include "eocatalog.databaseName" . }}
             - name: DB_MIN_CONN_SIZE
               value: {{ .Values.stac.dbConnectionSize.min | quote }}
             - name: DB_MAX_CONN_SIZE
@@ -256,16 +256,16 @@ spec:
             - name: REDIS_CLUSTER
               value: {{ .Values.stac.redisCluster | quote }}
             - name: REDIS_HOSTNAME
-              value: {{ include "eocatalogue.redisHost" . }}
+              value: {{ include "eocatalog.redisHost" . }}
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "eocatalogue.redis.secretName" . }}
-                  key: {{ include "eocatalogue.redis.secretPasswordKey" . }}
+                  name: {{ include "eocatalog.redis.secretName" . }}
+                  key: {{ include "eocatalog.redis.secretPasswordKey" . }}
             - name: REDIS_PORT
-              value: {{ include "eocatalogue.redisPort" . | quote }}
+              value: {{ include "eocatalog.redisPort" . | quote }}
             - name: REDIS_SSL
-              value: {{ include "eocatalogue.redis.tlsEnabled" . }}
+              value: {{ include "eocatalog.redis.tlsEnabled" . }}
             - name: REDIS_TTL
               value: {{ .Values.stac.redisTTL | quote }}
             - name: OTEL_ENABLED

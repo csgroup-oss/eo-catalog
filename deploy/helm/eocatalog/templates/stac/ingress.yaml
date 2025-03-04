@@ -2,7 +2,7 @@
 apiVersion: {{ include "common.capabilities.ingress.apiVersion" . }}
 kind: Ingress
 metadata:
-  name: {{ include "eocatalogue.stac" . }}
+  name: {{ include "eocatalog.stac" . }}
   namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" . | nindent 4 }}
     app.kubernetes.io/component: stac-api
@@ -34,7 +34,7 @@ spec:
             {{- if eq "true" (include "common.ingress.supportsPathType" .) }}
             pathType: {{ .Values.stac.ingress.pathType }}
             {{- end }}
-            backend: {{- include "common.ingress.backend" (dict "serviceName" (include "eocatalogue.stac" .) "servicePort" "http" "context" $)  | nindent 14 }}
+            backend: {{- include "common.ingress.backend" (dict "serviceName" (include "eocatalog.stac" .) "servicePort" "http" "context" $)  | nindent 14 }}
     {{- end }}
     {{- range .Values.stac.ingress.extraHosts }}
     - host: {{ .name | quote }}
@@ -44,7 +44,7 @@ spec:
             {{- if eq "true" (include "common.ingress.supportsPathType" $) }}
             pathType: {{ default "ImplementationSpecific" .pathType }}
             {{- end }}
-            backend: {{- include "common.ingress.backend" (dict "serviceName" (include "eocatalogue.stac" $) "servicePort" "http" "context" $) | nindent 14 }}
+            backend: {{- include "common.ingress.backend" (dict "serviceName" (include "eocatalog.stac" $) "servicePort" "http" "context" $) | nindent 14 }}
     {{- end }}
     {{- if .Values.stac.ingress.extraRules }}
     {{- include "common.tplvalues.render" (dict "value" .Values.stac.ingress.extraRules "context" $) | nindent 4 }}

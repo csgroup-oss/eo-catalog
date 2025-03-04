@@ -618,7 +618,7 @@ postgresql:
   enabled: true
   auth:
     postgresPassword: ""
-    username: eo-catalogue
+    username: eo-catalog
     password: ""
     database: postgis
     existingSecret: ""
@@ -692,7 +692,7 @@ externalDatabase:
   host: ""
   hostWriter: ""
   port: 5432
-  user: eo-catalogue
+  user: eo-catalog
   database: postgis
   password: ""
   postgresPassword: ""
