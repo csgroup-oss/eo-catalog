@@ -20,4 +20,4 @@ name: eo-catalog
 sources:
   - https://github.com/csgroup-oss/eo-catalog
 type: application
-version: 0.11.0
+version: 0.2.0
