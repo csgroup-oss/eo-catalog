@@ -122,7 +122,8 @@ spec:
             - |
               set -xe
               pypgstac pgready && pypgstac migrate
-              psql -U postgres -c 'ALTER DATABASE postgis SET search_path TO pgstac, public;'
+              psql -U postgres -c "GRANT pgstac_admin to \"${POSTGRES_DBUSER}\";"
+              psql -U postgres -c "ALTER DATABASE \"${POSTGRES_DBNAME}\" SET search_path TO pgstac, public;"
           env:
             - name: PGUSER
               value: postgres
@@ -147,11 +148,13 @@ spec:
             - name: POSTGRES_HOST_READER
               value: {{ include "eocatalog.databaseHost" . }}
             - name: POSTGRES_HOST_WRITER
-              value: {{ include "eocatalog.databaseHost" . }}
+              value: {{ include "eocatalog.databaseHostWriter" . }}
             - name: POSTGRES_PORT
               value: {{ include "eocatalog.databasePort" . }}
             - name: POSTGRES_DBNAME
               value: {{ include "eocatalog.databaseName" . }}
+            - name: POSTGRES_DBUSER
+              value: {{ include "eocatalog.databaseUser" . }}
         {{- end }}
       containers:
         - name: stac-api
