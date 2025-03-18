@@ -624,6 +624,7 @@ postgresql:
     existingSecret: ""
   architecture: standalone
   primary:
+    automountServiceAccountToken: true
     initdb:
       scripts:
         init.sql: |
