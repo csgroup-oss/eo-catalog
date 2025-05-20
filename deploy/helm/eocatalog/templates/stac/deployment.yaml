@@ -124,6 +124,7 @@ spec:
               PGPASSWORD=${PGPASSWORD} pypgstac pgready && PGPASSWORD=${PGPASSWORD} pypgstac migrate
               PGPASSWORD=${PGPASSWORD} psql -U postgres -c "GRANT pgstac_admin to \"${POSTGRES_DBUSER}\";"
               PGPASSWORD=${PGPASSWORD} psql -U postgres -c "ALTER DATABASE \"${POSTGRES_DBNAME}\" SET search_path TO pgstac, public;"
+              PGPASSWORD=${PGPASSWORD} psql -U postgres -c "ALTER DATABASE \"${POSTGRES_DBNAME}\" SET default_text_search_config TO english;"
           env:
             - name: PGUSER
               value: postgres
