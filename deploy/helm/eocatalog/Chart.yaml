@@ -1,9 +1,10 @@
 apiVersion: v2
+type: application
 dependencies:
   - condition: postgresql.enabled
     name: postgresql
     repository: oci://registry-1.docker.io/bitnamicharts
-    version: 15.x.x
+    version: 16.7.4
   - condition: redis.enabled
     name: redis
     repository: oci://registry-1.docker.io/bitnamicharts
@@ -19,5 +20,4 @@ icon: https://github.com/csgroup-oss/eo-catalog/-/blob/main/docs/static/eo-catal
 name: eo-catalog
 sources:
   - https://github.com/csgroup-oss/eo-catalog
-type: application
-version: 0.2.4
+version: 0.3.0
