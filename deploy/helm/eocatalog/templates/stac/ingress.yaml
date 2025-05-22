@@ -4,22 +4,15 @@ kind: Ingress
 metadata:
   name: {{ include "eocatalog.stac" . }}
   namespace: {{ include "common.names.namespace" . | quote }}
-  labels: {{- include "common.labels.standard" . | nindent 4 }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
     app.kubernetes.io/component: stac-api
-    {{- if .Values.commonLabels }}
-    {{- include "common.tplvalues.render" (dict "value" .Values.commonLabels "context" $) | nindent 4 }}
-    {{- end }}
-  {{- if or .Values.stac.ingress.annotations .Values.commonAnnotations }}
   annotations:
-    {{- if .Values.stac.ingress.annotations }}
-    {{- include "common.tplvalues.render" (dict "value" .Values.stac.ingress.annotations "context" $) | nindent 4 }}
+    {{- if or .Values.stac.ingress.annotations .Values.commonAnnotations }}
+    {{- $annotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.stac.ingress.annotations .Values.commonAnnotations ) "context" . ) }}
+    {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 4 }}
     {{- end }}
-    {{- if .Values.commonAnnotations }}
-    {{- include "common.tplvalues.render" (dict "value" .Values.commonAnnotations "context" $) | nindent 4 }}
-    {{- end }}
-  {{- end }}
 spec:
-  {{- if and .Values.stac.ingress.ingressClassName (eq "true" (include "common.ingress.supportsIngressClassname" .)) }}
+  {{- if .Values.stac.ingress.ingressClassName }}
   ingressClassName: {{ .Values.stac.ingress.ingressClassName | quote }}
   {{- end }}
   rules:
@@ -31,19 +24,15 @@ spec:
           {{- toYaml .Values.stac.ingress.extraPaths | nindent 10 }}
           {{- end }}
           - path: {{ .Values.stac.ingress.path }}
-            {{- if eq "true" (include "common.ingress.supportsPathType" .) }}
             pathType: {{ .Values.stac.ingress.pathType }}
-            {{- end }}
             backend: {{- include "common.ingress.backend" (dict "serviceName" (include "eocatalog.stac" .) "servicePort" "http" "context" $)  | nindent 14 }}
-    {{- end }}
+      {{- end }}
     {{- range .Values.stac.ingress.extraHosts }}
     - host: {{ .name | quote }}
       http:
         paths:
           - path: {{ default "/" .path }}
-            {{- if eq "true" (include "common.ingress.supportsPathType" $) }}
             pathType: {{ default "ImplementationSpecific" .pathType }}
-            {{- end }}
             backend: {{- include "common.ingress.backend" (dict "serviceName" (include "eocatalog.stac" $) "servicePort" "http" "context" $) | nindent 14 }}
     {{- end }}
     {{- if .Values.stac.ingress.extraRules }}
@@ -60,4 +49,4 @@ spec:
     {{- include "common.tplvalues.render" (dict "value" .Values.stac.ingress.extraTls "context" $) | nindent 4 }}
     {{- end }}
   {{- end }}
-{{- end -}}
+{{- end }}
