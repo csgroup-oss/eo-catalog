@@ -16,20 +16,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+import asyncio
+import logging
+import os
+import httpx
+from typing import Optional, Union, Any, Dict
 
 from stac_fastapi.pgstac.db import dbfunc
-from stac_fastapi.pgstac.models.links import CollectionLinks
+from stac_fastapi.pgstac.models.links import CollectionLinks, ItemLinks
 from stac_fastapi.pgstac.transactions import TransactionsClient
 from stac_fastapi.types import stac as stac_types
-from stac_pydantic import Collection
+from stac_pydantic import Collection, Item
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.background import BackgroundTasks
+from pydantic import BaseModel
 
 from eoapi.stac.auth import CollectionsScopes
 from eoapi.stac.config import Settings
 from eoapi.stac.constants import CACHE_KEY_COLLECTIONS
 from eoapi.stac.utils import fetch_all_collections_with_scopes
+
+logger = logging.getLogger(__name__)
+
+
+class WebhookPayload(BaseModel):
+    """Webhook payload structure."""
+    event_type: str  # "insert" or "update"
+    status: str  # "success" or "failed"
+    collection_id: str
+    item_id: str
+    item_data: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
 
 async def _update_collection_scopes(request: Request):
@@ -46,7 +64,36 @@ async def _update_collection_scopes(request: Request):
     CollectionsScopes(collections, settings.eoapi_auth_metadata_field).set_scopes_for_collections()
 
 
+async def send_webhook(webhook_url: str, payload: WebhookPayload) -> None:
+    """Send webhook notification as a background task.
+    Args:
+        webhook_url: The URL to send the webhook to
+        payload: The webhook payload
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                webhook_url,
+                json=payload.model_dump(),
+                timeout=30.0
+            )
+            response.raise_for_status()
+            logger.info(f"Webhook sent successfully to {webhook_url} for {payload.event_type} {payload.item_id}")
+    except httpx.HTTPError as e:
+        logger.error(f"Failed to send webhook to {webhook_url}: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error sending webhook: {str(e)}")
+
+
 class EoApiTransactionsClient(TransactionsClient):
+    def __init__(self):
+        super().__init__()
+        self.webhook_url = os.getenv("ANTFLOW_WEBHOOK_URL")
+        if self.webhook_url:
+            logger.info(f"Webhook URL configured: {self.webhook_url}")
+        else:
+            logger.warning("No webhook URL configured. Set ANTFLOW_WEBHOOK_URL to enable webhooks.")
+
     async def create_collection(
         self,
         collection: Collection,
@@ -93,3 +140,109 @@ class EoApiTransactionsClient(TransactionsClient):
         await _update_collection_scopes(request)
 
         return stac_types.Collection(**col)
+
+    async def create_item(
+        self,
+        item: Item,
+        request: Request,
+        **kwargs,
+    ) -> Optional[Union[stac_types.Item, Response]]:
+        """Create item; called with POST /collections/{collection_id}/items
+        overwrites create_item from stac_fastapi to add webhook support
+        """
+        collection_id = request.path_params.get("collection_id")
+        item_dict = item.model_dump(mode="json")
+        item_id = item_dict.get("id")
+
+        webhook_payload = None
+        status = "failed"
+        error_message = None
+
+        try:
+            result = await super().create_item(item, request, **kwargs)
+
+            if result and isinstance(result, stac_types.Item):
+                status = "success"
+                item_dict = result.model_dump()
+
+                item_dict["links"] = await ItemLinks(
+                    collection_id=collection_id,
+                    item_id=item_id,
+                    request=request,
+                ).get_links(extra_links=item_dict.get("links"))
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error creating item {item_id} in collection {collection_id}: {str(e)}")
+            error_message = str(e)
+            raise
+
+        finally:
+            if self.webhook_url and collection_id and item_id:
+                webhook_payload = WebhookPayload(
+                    event_type="insert",
+                    status=status,
+                    collection_id=collection_id,
+                    item_id=item_id,
+                    item_data=item_dict if status == "success" else None,
+                    error=error_message
+                )
+
+                background_tasks = BackgroundTasks()
+                background_tasks.add_task(send_webhook, self.webhook_url, webhook_payload)
+
+                asyncio.create_task(background_tasks())
+
+    async def update_item(
+        self,
+        item: Item,
+        request: Request,
+        **kwargs,
+    ) -> Optional[Union[stac_types.Item, Response]]:
+        """Update item; called with PUT /collections/{collection_id}/items/{item_id}
+        overwrites update_item from stac_fastapi to add webhook support
+        """
+        collection_id = request.path_params.get("collection_id")
+        item_id = request.path_params.get("item_id")
+        item_dict = item.model_dump(mode="json")
+
+        webhook_payload = None
+        status = "failed"
+        error_message = None
+
+        try:
+            result = await super().update_item(item, request, **kwargs)
+
+            if result and isinstance(result, stac_types.Item):
+                status = "success"
+                item_dict = result.model_dump()
+
+                item_dict["links"] = await ItemLinks(
+                    collection_id=collection_id,
+                    item_id=item_id,
+                    request=request,
+                ).get_links(extra_links=item_dict.get("links"))
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error updating item {item_id} in collection {collection_id}: {str(e)}")
+            error_message = str(e)
+            raise
+
+        finally:
+            if self.webhook_url and collection_id and item_id:
+                webhook_payload = WebhookPayload(
+                    event_type="update",
+                    status=status,
+                    collection_id=collection_id,
+                    item_id=item_id,
+                    item_data=item_dict if status == "success" else None,
+                    error=error_message
+                )
+
+                background_tasks = BackgroundTasks()
+                background_tasks.add_task(send_webhook, self.webhook_url, webhook_payload)
+
+                asyncio.create_task(background_tasks())
