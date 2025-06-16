@@ -159,11 +159,21 @@ class EoApiTransactionsClient(TransactionsClient):
         error_message = None
 
         try:
-            result = await super().create_item(item, request, **kwargs)
+            """Remove collection_id from kwargs if present to avoid conflict
+            error: TransactionsClient.create_item() got multiple values for argument 'collection_id'
+            """
+            kwargs_filtered = {k: v for k, v in kwargs.items() if k != 'collection_id'}
+            result = await super().create_item(collection_id, item, request, **kwargs_filtered)
 
-            if result and isinstance(result, stac_types.Item):
+            if result:
                 status = "success"
-                item_dict = result.model_dump()
+                """Handle both dict and Pydantic model results
+                error: AttributeError: 'dict' object has no attribute 'model_dump
+                """
+                if hasattr(result, 'model_dump'):
+                    item_dict = result.model_dump()
+                else:
+                    item_dict = result
 
                 item_dict["links"] = await ItemLinks(
                     collection_id=collection_id,
@@ -212,11 +222,15 @@ class EoApiTransactionsClient(TransactionsClient):
         error_message = None
 
         try:
-            result = await super().update_item(item, request, **kwargs)
+            kwargs_filtered = {k: v for k, v in kwargs.items() if k not in ['collection_id', 'item_id']}
+            result = await super().update_item(request, collection_id, item_id, item, **kwargs_filtered)
 
-            if result and isinstance(result, stac_types.Item):
+            if result:
                 status = "success"
-                item_dict = result.model_dump()
+                if hasattr(result, 'model_dump'):
+                    item_dict = result.model_dump()
+                else:
+                    item_dict = result
 
                 item_dict["links"] = await ItemLinks(
                     collection_id=collection_id,
