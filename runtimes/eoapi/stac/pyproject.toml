@@ -32,6 +32,7 @@ dependencies = [
     "importlib_resources>=1.1.0;python_version<'3.9'",
     "psycopg_pool",
     "eoapi.auth-utils>=0.2.0",
+    "httpx==0.28.1",
 ]
 
 
