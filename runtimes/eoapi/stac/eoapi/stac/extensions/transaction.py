@@ -29,7 +29,6 @@ from stac_fastapi.types import stac as stac_types
 from stac_pydantic import Collection, Item
 from starlette.requests import Request
 from starlette.responses import Response
-from starlette.background import BackgroundTasks
 from pydantic import BaseModel
 
 from eoapi.stac.auth import CollectionsScopes
@@ -199,10 +198,7 @@ class EoApiTransactionsClient(TransactionsClient):
                     error=error_message
                 )
 
-                background_tasks = BackgroundTasks()
-                background_tasks.add_task(send_webhook, self.webhook_url, webhook_payload)
-
-                asyncio.create_task(background_tasks())
+                asyncio.create_task(send_webhook(self.webhook_url, webhook_payload))
 
     async def update_item(
         self,
@@ -256,7 +252,4 @@ class EoApiTransactionsClient(TransactionsClient):
                     error=error_message
                 )
 
-                background_tasks = BackgroundTasks()
-                background_tasks.add_task(send_webhook, self.webhook_url, webhook_payload)
-
-                asyncio.create_task(background_tasks())
+                asyncio.create_task(send_webhook(self.webhook_url, webhook_payload))
