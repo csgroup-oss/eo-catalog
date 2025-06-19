@@ -29,7 +29,6 @@ from stac_fastapi.extensions.core import (
     SearchFilterExtension,
     SortExtension,
     TokenPaginationExtension,
-    TransactionExtension,
 )
 from stac_fastapi.extensions.core.fields import FieldsConformanceClasses
 from stac_fastapi.extensions.core.free_text import FreeTextConformanceClasses
@@ -64,6 +63,7 @@ from eoapi.stac.extensions.transaction import EoApiTransactionsClient
 from eoapi.stac.logs import init_logging
 from eoapi.stac.middlewares.timeout import add_timeout
 from eoapi.stac.utils import fetch_all_collections_with_scopes
+from eoapi.stac.extensions.custom_transaction_extension import BackgroundTasksTransactionExtension
 
 PACKAGE_NAME = __package__ or "eoapi.stac"
 
@@ -80,7 +80,7 @@ init_logging(service_name=settings.otel_service_name, debug=settings.debug)
 logger = logging.getLogger(__name__)
 
 application_extensions_map: dict[str, ApiExtension] = {
-    "transaction": TransactionExtension(
+    "transaction": BackgroundTasksTransactionExtension(
         client=EoApiTransactionsClient(),
         settings=settings,
         response_class=ORJSONResponse,

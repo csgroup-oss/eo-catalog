@@ -16,12 +16,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import logging
 import os
 import httpx
 from typing import Optional, Union, Any, Dict
 
+from fastapi import BackgroundTasks
 from stac_fastapi.pgstac.db import dbfunc
 from stac_fastapi.pgstac.models.links import CollectionLinks, ItemLinks
 from stac_fastapi.pgstac.transactions import TransactionsClient
@@ -144,6 +144,7 @@ class EoApiTransactionsClient(TransactionsClient):
         self,
         item: Item,
         request: Request,
+        background_tasks: BackgroundTasks,
         **kwargs,
     ) -> Optional[Union[stac_types.Item, Response]]:
         """Create item; called with POST /collections/{collection_id}/items
@@ -153,7 +154,6 @@ class EoApiTransactionsClient(TransactionsClient):
         item_dict = item.model_dump(mode="json")
         item_id = item_dict.get("id")
 
-        webhook_payload = None
         status = "failed"
         error_message = None
 
@@ -188,7 +188,7 @@ class EoApiTransactionsClient(TransactionsClient):
             raise
 
         finally:
-            if self.webhook_url and collection_id and item_id:
+            if self.webhook_url and collection_id and item_id and background_tasks:
                 webhook_payload = WebhookPayload(
                     event_type="insert",
                     status=status,
@@ -197,13 +197,14 @@ class EoApiTransactionsClient(TransactionsClient):
                     item_data=item_dict if status == "success" else None,
                     error=error_message
                 )
+                background_tasks.add_task(send_webhook, self.webhook_url, webhook_payload)
 
-                asyncio.create_task(send_webhook(self.webhook_url, webhook_payload))
 
     async def update_item(
         self,
         item: Item,
         request: Request,
+        background_tasks: BackgroundTasks,
         **kwargs,
     ) -> Optional[Union[stac_types.Item, Response]]:
         """Update item; called with PUT /collections/{collection_id}/items/{item_id}
@@ -213,7 +214,6 @@ class EoApiTransactionsClient(TransactionsClient):
         item_id = request.path_params.get("item_id")
         item_dict = item.model_dump(mode="json")
 
-        webhook_payload = None
         status = "failed"
         error_message = None
 
@@ -242,7 +242,7 @@ class EoApiTransactionsClient(TransactionsClient):
             raise
 
         finally:
-            if self.webhook_url and collection_id and item_id:
+            if self.webhook_url and collection_id and item_id and background_tasks:
                 webhook_payload = WebhookPayload(
                     event_type="update",
                     status=status,
@@ -251,5 +251,4 @@ class EoApiTransactionsClient(TransactionsClient):
                     item_data=item_dict if status == "success" else None,
                     error=error_message
                 )
-
-                asyncio.create_task(send_webhook(self.webhook_url, webhook_payload))
+                background_tasks.add_task(send_webhook, self.webhook_url, webhook_payload)
