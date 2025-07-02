@@ -176,3 +176,4 @@ node_modules/
 # helm charts
 **/charts/
 **/Chart.lock
+*.tgz

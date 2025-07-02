@@ -193,7 +193,7 @@ All components are removed except the PrivateVolumeClaim if you use a persistent
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------- |
 | `postgresql.enabled`                | Switch to enable or disable the PostgreSQL helm chart                                                             | `true`         |
 | `postgresql.auth.postgresPassword`  | Password for the "postgres" admin user. Ignored if `auth.existingSecret` with key `postgres-password` is provided | `""`           |
-| `postgresql.auth.username`          | Name for a custom user to create                                                                                  | `eo-catalogue` |
+| `postgresql.auth.username`          | Name for a custom user to create                                                                                  | `eo-catalog` |
 | `postgresql.auth.password`          | Password for the custom user to create                                                                            | `""`           |
 | `postgresql.auth.database`          | Name for a custom database to create                                                                              | `postgis`      |
 | `postgresql.auth.existingSecret`    | Name of existing secret to use for PostgreSQL credentials                                                         | `""`           |
@@ -220,7 +220,7 @@ All components are removed except the PrivateVolumeClaim if you use a persistent
 | `externalDatabase.host`                              | Database host                                                                                                       | `""`           |
 | `externalDatabase.hostWriter`                        | Database host for write operations. Default to externalDatabase.host. Needed when externalDatabase.host is readonly | `""`           |
 | `externalDatabase.port`                              | Database port number                                                                                                | `5432`         |
-| `externalDatabase.user`                              | Non-root username for EO Catalog STAC API                                                                           | `eo-catalogue` |
+| `externalDatabase.user`                              | Non-root username for EO Catalog STAC API                                                                           | `eo-catalog` |
 | `externalDatabase.password`                          | Password for the non-root username for EO Catalog STAC API                                                          | `""`           |
 | `externalDatabase.postgresPassword`                  | Password for the root username for EO Catalog STAC API                                                              | `""`           |
 | `externalDatabase.database`                          | EO Catalog STAC API database name                                                                                   | `postgis`      |

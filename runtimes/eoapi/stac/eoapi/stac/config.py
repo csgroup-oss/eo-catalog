@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_ssl: bool = True
 
+    stac_fastapi_landing_id: str = "eo-catalog-stac"
+
     eoapi_auth_metadata_field: str = "scope"
     eoapi_auth_update_scope: str = "admin"
 

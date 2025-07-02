@@ -1,4 +1,4 @@
-<img src="./docs/static/eo-catalogue-logo-1080.webp" align="center" width="200" alt="EO Catalog logo" />
+<img src="./docs/static/eo-catalog-logo-1080.webp" align="center" width="200" alt="EO Catalog logo" />
 
 ---
 EO Catalog, a eoAPI customization.

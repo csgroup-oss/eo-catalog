@@ -4,10 +4,10 @@ FROM python:${PYTHON_VERSION}-slim
 
 ENV CURL_CA_BUNDLE /etc/ssl/certs/ca-certificates.crt
 
-RUN apt update && apt install git -y
+RUN apt update && apt install git postgresql-client -y
 
 COPY runtimes/eoapi/stac /tmp/stac
-RUN python -m pip install /tmp/stac[server,telemetry,redis]
+RUN python -m pip install /tmp/stac[server,telemetry,redis] pypgstac[psycopg]
 RUN rm -rf /tmp/stac
 
 ENV MODULE_NAME eoapi.stac.app

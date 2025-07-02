@@ -82,6 +82,9 @@ async def cached_result(
     settings: Settings = request.app.state.settings
     r: Redis
 
+    # Add a prefix to the cache key to avoid collisions between different instances
+    cache_key = f"{settings.stac_fastapi_landing_id}:{cache_key}"
+
     # GET key from cache
     try:
         r = request.app.state.redis
