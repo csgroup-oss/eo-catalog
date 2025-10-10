@@ -1,0 +1,136 @@
+# Copyright 2025 CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.cnpgstac.clusterName }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" . | nindent 4 }}
+    app.kubernetes.io/component: cnpgstac
+    {{- if .Values.commonLabels }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.commonLabels "context" $) | nindent 4 }}
+    {{- end }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" (dict "value" .Values.commonAnnotations "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.cnpgstac.imageCatalog.enabled }}
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ClusterImageCatalog
+    name: {{ .Values.cnpgstac.imageCatalog.name }}
+    major: {{ .Values.cnpgstac.imageCatalog.major }}
+  {{- else if or (and .Values.cnpgstac.image.repository .Values.cnpgstac.image.registry) .Values.global.imageRegistry }}
+    {{- $image := include "common.images.image" (dict "imageRoot" .Values.cnpgstac.image "global" .Values.global) | trim }}
+  imageName: {{ $image }}
+  {{- else }}
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ClusterImageCatalog
+    name: postgis-standard-trixie
+    major: 17
+  {{- end }}
+  {{- if .Values.cnpgstac.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.cnpgstac.image.pullPolicy }}
+  {{- end }}
+  {{- include "cnpgstac.imagePullSecrets" . | nindent 2 }}
+  instances: {{ .Values.cnpgstac.instances | default "3" }}
+  {{- if .Values.cnpgstac.startDelay }}
+  startDelay: {{ .Values.cnpgstac.startDelay }}
+  {{- end }}
+  {{- if .Values.cnpgstac.stopDelay }}
+  stopDelay: {{ .Values.cnpgstac.stopDelay }}
+  {{- end }}
+  {{- if .Values.cnpgstac.primaryUpdateStrategy }}
+  primaryUpdateStrategy: {{ .Values.cnpgstac.primaryUpdateStrategy }}
+  {{- end }}
+  {{- with .Values.cnpgstac.bootstrap }}
+  bootstrap:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if .Values.cnpgstac.superUserAccess.enabled }}
+  enableSuperuserAccess: true
+  {{- end }}
+  {{- if .Values.cnpgstac.backup.barman.enabled }}
+  plugins:
+  - name: barman-cloud.cloudnative-pg.io
+    isWALArchiver: {{ .Values.cnpgstac.backup.barman.barman.isWALArchiver }}
+    parameters:
+      barmanObjectName: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.name }}
+  {{- end }}
+  {{- if .Values.cnpgstac.superUserAccess.existingSecret }}
+  superuserSecret:
+    name: {{- .Values.cnpgstac.superUserAccess.existingSecret }}
+  {{- end }}
+  postgresql:
+    parameters:
+      {{- with .Values.cnpgstac.postgresql.parameters }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      # shared_buffers: should be 1/4 of the total RAM
+      shared_buffers: {{ include "shared_buffers" . }}{{ include "limit_suffix_bytes" . }}
+      # effective_cache_size: should be 3/4 of the total RAM
+      effective_cache_size: {{ include "effective_cache_size" . }}{{ include "limit_suffix_bytes" . }}
+    {{- with .Values.cnpgstac.postgresql.shared_preload_libraries }}
+    shared_preload_libraries:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.cnpgstac.postgresql.pg_hba }}
+    pg_hba:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.cnpgstac.postgresql.pg_ident }}
+    pg_ident:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.cnpgstac.postgresql.synchronous }}
+    synchronous:
+      {{- toYaml . | nindent 6 }}
+    {{ end }}
+  {{- if .Values.cnpgstac.resources }}
+  resources: {{- toYaml .Values.cnpgstac.resources | nindent 4 }}
+  {{- end }}
+  {{- if .Values.cnpgstac.persistence.enabled }}
+  storage:
+    pvcTemplate:
+      accessModes:
+      {{- range .Values.cnpgstac.persistence.accessModes }}
+        - {{ . | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.cnpgstac.persistence.size | quote }}
+      volumeMode: Filesystem
+      {{- include "common.storage.class" (dict "persistence" .Values.cnpgstac.persistence "global" .Values.global) | nindent 6 }}
+  {{- end }}
+  {{- if .Values.cnpgstac.affinity }}
+  affinity: {{- include "common.tplvalues.render" (dict "value" .Values.cnpgstac.affinity "context" $) | nindent 4 }}
+  {{- else if or .Values.cnpgstac.podAffinityPreset .Values.cnpgstac.podAntiAffinityPreset .Values.cnpgstac.nodeAffinityPreset }}
+  affinity:
+    # https://cloudnative-pg.io/documentation/current/cloudnative-pg.v1/#postgresql-cnpg-io-v1-AffinityConfiguration
+    enablePodAntiAffinity: false
+    topologyKey: ''
+    podAntiAffinityType: ''
+    # tolerations: ''
+    additionalPodAffinity: {{- include "common.affinities.pods" (dict "type" .Values.cnpgstac.podAffinityPreset "instance" .Chart.Name "context" $) | nindent 6}}
+    additionalPodAntiAffinity: {{- include "common.affinities.pods" (dict "type" .Values.cnpgstac.podAntiAffinityPreset "instance" .Chart.Name "context" $) | nindent 8 }}
+    nodeAffinity: {{- include "common.affinities.nodes" (dict "type" .Values.cnpgstac.nodeAffinityPreset.type "key" .Values.cnpgstac.nodeAffinityPreset.key "values" .Values.cnpgstac.nodeAffinityPreset.values) | nindent 6 }}
+  {{- end }}
+  {{- if .Values.cnpgstac.nodeSelector }}
+    nodeSelector: {{- include "common.tplvalues.render" (dict "value" .Values.cnpgstac.nodeSelector "context" $) | nindent 6 }}
+  {{- end }}
+  {{- if .Values.cnpgstac.tolerations }}
+    tolerations: {{- include "common.tplvalues.render" (dict "value" .Values.cnpgstac.tolerations "context" .) | nindent 6 }}
+  {{- end }}
