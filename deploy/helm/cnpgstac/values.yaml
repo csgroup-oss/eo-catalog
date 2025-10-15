@@ -144,34 +144,34 @@ cnpgstac:
     enabled: false
 
     # -- Additionnals STAC extensions
-    extensions:
-      - https://stac-extensions.github.io/eo/v1.1.0/schema.json
-      - https://stac-extensions.github.io/sat/v1.0.0/schema.json
-      - https://stac-extensions.github.io/projection/v1.1.0/schema.json
-      - https://stac-extensions.github.io/processing/v1.2.0/schema.json
-      - https://stac-extensions.github.io/product/v0.1.0/schema.json
-      - https://stac-extensions.github.io/sar/v1.0.0/schema.json
-      - https://stac-extensions.github.io/raster/v1.1.0/schema.json
-      - https://stac-extensions.github.io/authentication/v1.1.0/schema.json
-      - https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json
-      - https://stac-extensions.github.io/timestamps/v1.1.0/schema.json
+    extensions: []
+      # - https://stac-extensions.github.io/eo/v1.1.0/schema.json
+      # - https://stac-extensions.github.io/sat/v1.0.0/schema.json
+      # - https://stac-extensions.github.io/projection/v1.1.0/schema.json
+      # - https://stac-extensions.github.io/processing/v1.2.0/schema.json
+      # - https://stac-extensions.github.io/product/v0.1.0/schema.json
+      # - https://stac-extensions.github.io/sar/v1.0.0/schema.json
+      # - https://stac-extensions.github.io/raster/v1.1.0/schema.json
+      # - https://stac-extensions.github.io/authentication/v1.1.0/schema.json
+      # - https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json
+      # - https://stac-extensions.github.io/timestamps/v1.1.0/schema.json
 
     # -- Additionnals queryables
-    queryables:
-      - eo:snow_cover
-      - sat:absolute_orbit
-      - sat:relative_orbit
-      - processing:level
-      - processing:facility
-      - processing:datetime
-      - processing:version
-      - product:type
-      - product:timeliness
-      - product:timeliness_category
-      - sar:instrument_mode
-      - published
-      - expires
-      - unpublished
+    queryables: []
+      # - eo:snow_cover
+      # - sat:absolute_orbit
+      # - sat:relative_orbit
+      # - processing:level
+      # - processing:facility
+      # - processing:datetime
+      # - processing:version
+      # - product:type
+      # - product:timeliness
+      # - product:timeliness_category
+      # - sar:instrument_mode
+      # - published
+      # - expires
+      # - unpublished
 
     #### use template to render only if needed
     # -- Pod initContainers
@@ -213,12 +213,17 @@ cnpgstac:
     enabled: false
     name: cnpgstac
     major: 17
-    images:
-      - major: 17
-        registry: ghcr.io
-        repository: csgroup-oss/eo-catalog-cnpgstac
-        tag: feat-cloudnativepg
-        digest: ''
+    images: []
+      # - major: 17
+      #   registry: 643vlk6z.gra7.container-registry.ovh.net
+      #   repository: public/eo-catalog-cnpgis
+      #   tag: 17
+      #   digest: ''
+      # - major: 16
+      #   registry: 643vlk6z.gra7.container-registry.ovh.net
+      #   repository: public/eo-catalog-cnpgis
+      #   tag: ''
+      #   digest: 'sha256:61546939083837014b75c0217abef966b7e484b8b9b4104c7d0a285572bbf08d'
 
   ## CloudNative PostGIS resource requests and limits
   ## ref: https://kubernetes.io/docs/user-guide/compute-resources/

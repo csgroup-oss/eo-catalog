@@ -26,4 +26,5 @@ name: eo-cnpgstac
 sources:
   - https://github.com/csgroup-oss/eo-catalogue
 type: application
-version: 0.10.0
+version: 1.0.0-alpha
+appVersion: 0.9.8

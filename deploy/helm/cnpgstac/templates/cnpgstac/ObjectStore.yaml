@@ -38,10 +38,16 @@ spec:
       secretAccessKey:
         key: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.configuration.s3Credentials.secretAccessKey }}
         name: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.configuration.s3Credentials.secretName }}
+    {{- with .Values.cnpgstac.backup.barman.barmanObjectStore.configuration }}
+      {{- if ne .wal.compression "none" }}
     wal:
-      compression: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.configuration.wal.compression }}
+      compression: {{ .wal.compression }}
+      {{- end }}
+      {{- if ne .data.compression "none" }}
     data:
-      compression: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.configuration.data.compression }}
+      compression: {{ .data.compression }}
+      {{- end }}
+    {{- end }}
   retentionPolicy: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.retentionPolicy }}
 {{- end }}
 {{- end }}
