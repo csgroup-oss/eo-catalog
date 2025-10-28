@@ -67,6 +67,10 @@ cnpgstac:
   ## @param cnpgstac.clusterName Name of the cnpgstac cluster
   clusterName: cnpgstac
 
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+  ## ref: https://cloudnative-pg.io/documentation/current/labels_annotations/#labels-and-annotations
+  clusterLabels: {}
+
   ## Define postgres user password
   ## ref: https://cloudnative-pg.io/documentation/current/security/#postgresql
   superUserAccess:
