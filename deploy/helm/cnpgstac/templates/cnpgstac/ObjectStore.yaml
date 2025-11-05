@@ -33,10 +33,10 @@ spec:
     endpointURL: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.configuration.endpointURL }}
     s3Credentials:
       accessKeyId:
-        key: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.configuration.s3Credentials.accessKeyId}}
+        key: S3_ACCESSKEY
         name: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.configuration.s3Credentials.secretName }}
       secretAccessKey:
-        key: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.configuration.s3Credentials.secretAccessKey }}
+        key: S3_SECRETKEY
         name: {{ .Values.cnpgstac.backup.barman.barmanObjectStore.configuration.s3Credentials.secretName }}
     {{- with .Values.cnpgstac.backup.barman.barmanObjectStore.configuration }}
       {{- if ne .wal.compression "none" }}
