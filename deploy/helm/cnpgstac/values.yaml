@@ -1,0 +1,304 @@
+# Copyright 2025 CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+## @section Global parameters
+## Global Docker image parameters
+## Please, note that this will override the image parameters, including dependencies, configured to use the global value
+## Current available global Docker image parameters: imageRegistry, imagePullSecrets and storageClass
+##
+
+## @param global.imageRegistry Global Docker image registry
+## @param global.imagePullSecrets Global Docker registry secret names as an array
+## @param global.storageClass Global StorageClass for Persistent Volume(s)
+##
+global:
+  imageRegistry: ""
+  ## E.g.
+  ## imagePullSecrets:
+  ##   - myRegistryKeySecretName
+  ##
+  imagePullSecrets: []
+  storageClass: ""
+
+## @section Common parameters
+##
+
+## @param kubeVersion Force target Kubernetes version (using Helm capabilities if not set)
+##
+kubeVersion: ""
+## @param nameOverride String to partially override common.names.fullname
+##
+nameOverride: ""
+## @param fullnameOverride String to fully override common.names.fullname
+##
+fullnameOverride: ""
+## @param namespaceOverride String to fully override common.names.namespace
+##
+namespaceOverride: ""
+## @param commonLabels Labels to add to all deployed objects
+##
+commonLabels: {}
+## @param commonAnnotations Annotations to add to all deployed objects
+##
+commonAnnotations: {}
+## @param clusterDomain Kubernetes cluster domain name
+##
+clusterDomain: cluster.local
+## @param extraDeploy Array of extra objects to deploy with the release
+##
+extraDeploy: []
+
+## @section CloudNative PostGIS parameters
+cnpgstac:
+  ## @param cnpgstac.enabled Enabled CloudNative PostGIS
+  enabled: true
+
+  ## @param cnpgstac.clusterName Name of the cnpgstac cluster
+  clusterName: cnpgstac
+
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+  ## ref: https://cloudnative-pg.io/documentation/current/labels_annotations/#labels-and-annotations
+  clusterLabels: {}
+
+  ## Define postgres user password
+  ## ref: https://cloudnative-pg.io/documentation/current/security/#postgresql
+  superUserAccess:
+    ## @param cnpgstac.superUserAccess.enabled Enabled PostgreSQL superuser (postgres)
+    enabled: true
+    ## @param cnpgstac.superUserAccess.existingSecret Use existing secret for superuser instead of randomly generated
+    ## ref: https://cloudnative-pg.io/documentation/current/applications/#secrets
+    existingSecret: ""
+
+  ## @param cnpgstac.instances Number of instances
+  instances: 1
+
+  ## @param cnpgstac.startDelay Number of instances
+  startDelay: ""
+  ## @param cnpgstac.stopDelay Number of instances
+  stopDelay: ""
+  ## @param cnpgstac.primaryUpdateStrategy Number of instances
+  primaryUpdateStrategy: ""
+
+  postgresql:
+    ## @param cnpgstac.postgresql.parameters PostgreSQL configuration options (postgresql.conf)
+    parameters: {}
+      # max_connections: 300
+    ## @param cnpgstac.postgresql.synchronous Quorum-based Synchronous Replication
+    synchronous: {}
+     # method: any
+     # number: 1
+    ## @param cnpgstac.postgresql.pg_hba PostgreSQL Host Based Authentication rules (lines to be appended to the pg_hba.conf file)
+    pg_hba: []
+      # - host all all 10.244.0.0/16 md5
+    ## @param cnpgstac.postgresql.pg_ident PostgreSQL User Name Maps rules (lines to be appended to the pg_ident.conf file)
+    pg_ident: []
+      # - mymap   /^(.*)@mydomain\.com$      \1
+    ## @param cnpgstac.postgresql.shared_preload_libraries Lists of shared preload libraries to add to the default ones
+    shared_preload_libraries: []
+      # - pgaudit
+
+  # bootstrap: {}
+  bootstrap:
+    # initdb: {}
+    initdb:
+      database: catalog
+      # owner: "" # Defaults to the database name
+      # secret:
+      #   name: "" # Name of the secret containing the initial credentials for the owner of the user database. If empty a new secret will be created from scratch
+      # options: []
+      # encoding: UTF8
+      # postInitSQL:
+      #   - CREATE EXTENSION IF NOT EXISTS vector;
+      # postInitApplicationSQL: []
+      # postInitTemplateSQL: []
+
+  backup:
+    barman:
+      enabled: false
+      isWALArchiver: true
+      barmanObjectStore:
+        name: cnpgstac
+        configuration:
+          destinationPath: s3://my-bucket/my-folder/
+          endpointURL: https://s3.gra.io.cloud.ovh.net
+          s3Credentials:
+            secretName: cnpgstac-backup-obs
+            accessKeyId: accessKeyId
+            secretAccessKey: secretAccessKey
+          # -- Compression
+          # -- Supported Compression Algorithms : https://cloudnative-pg.io/plugin-barman-cloud/docs/compression/#supported-compression-algorithms
+          wal:
+            compression: none # Possible values are none, bzip2, gzip, lz4, snappy, xz and zstd
+          data:
+            compression: none # Possible values are none, bzip2, gzip, snappy
+        retentionPolicy: 10d
+
+  custom:
+    enabled: false
+
+    # -- Additionnals STAC extensions
+    extensions: []
+      # - https://stac-extensions.github.io/eo/v1.1.0/schema.json
+      # - https://stac-extensions.github.io/sat/v1.0.0/schema.json
+      # - https://stac-extensions.github.io/projection/v1.1.0/schema.json
+      # - https://stac-extensions.github.io/processing/v1.2.0/schema.json
+      # - https://stac-extensions.github.io/product/v0.1.0/schema.json
+      # - https://stac-extensions.github.io/sar/v1.0.0/schema.json
+      # - https://stac-extensions.github.io/raster/v1.1.0/schema.json
+      # - https://stac-extensions.github.io/authentication/v1.1.0/schema.json
+      # - https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json
+      # - https://stac-extensions.github.io/timestamps/v1.1.0/schema.json
+
+    # -- Additionnals queryables
+    queryables: []
+      # - eo:snow_cover
+      # - sat:absolute_orbit
+      # - sat:relative_orbit
+      # - processing:level
+      # - processing:facility
+      # - processing:datetime
+      # - processing:version
+      # - product:type
+      # - product:timeliness
+      # - product:timeliness_category
+      # - sar:instrument_mode
+      # - published
+      # - expires
+      # - unpublished
+
+    #### use template to render only if needed
+    # -- Pod initContainers
+    initContainers:
+    - name: download-pgstac-extensions
+      image: alpine/curl
+      command: [ "/scripts/init/download.sh" ]
+      volumeMounts:
+        - name: download-json-schema
+          mountPath: /scripts/init/
+        - name: pgstac-json-schema
+          mountPath: /opt/pgstac_json_schema/
+
+    ## Enable readonly mode in pgstac
+    ## If true, usage of titiler-pgstac is limited
+    ## ref: https://github.com/stac-utils/pgstac/pull/215 and https://github.com/stac-utils/pgstac/issues/296 
+    enableReadOnly: true
+
+  image:
+    registry: ''
+    repository: ''
+    tag: ''
+    digest: ''
+    ## Specify a imagePullPolicy
+    ## Defaults to 'Always' if image tag is 'latest', else set to 'IfNotPresent'
+    ## ref: https://kubernetes.io/docs/user-guide/images/#pre-pulling-images
+    ##
+    pullPolicy: IfNotPresent
+    ## Optionally specify an array of imagePullSecrets.
+    ## Secrets must be manually created in the namespace.
+    ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+    ## Example:
+    ## pullSecrets:
+    ##   - myRegistryKeySecretName
+    ##
+    pullSecrets: []
+
+  imageCatalog:
+    enabled: false
+    name: cnpgstac
+    major: 17
+    images: []
+      # - major: 17
+      #   registry: 643vlk6z.gra7.container-registry.ovh.net
+      #   repository: public/eo-catalog-cnpgis
+      #   tag: 17
+      #   digest: ''
+      # - major: 16
+      #   registry: 643vlk6z.gra7.container-registry.ovh.net
+      #   repository: public/eo-catalog-cnpgis
+      #   tag: ''
+      #   digest: 'sha256:61546939083837014b75c0217abef966b7e484b8b9b4104c7d0a285572bbf08d'
+
+  ## CloudNative PostGIS resource requests and limits
+  ## ref: https://kubernetes.io/docs/user-guide/compute-resources/
+  ## @param cnpgstac.resources.limits The resources limits for the CloudNative PostGIS containers
+  ## @param cnpgstac.resources.requests The requested resources for the CloudNative PostGIS containers
+  ##
+  resources:
+    #limits: {}
+    #requests: {}
+    requests:
+      memory: "1024M"
+      cpu: "1"
+    limits:
+      memory: "2G"
+      cpu: "2"
+
+  ## PostgreSQL Primary persistence configuration
+  ##
+  persistence:
+    ## @param primary.persistence.enabled Enable PostgreSQL Primary data persistence using PVC
+    ##
+    enabled: true
+    storageClass: ''
+    ## @param primary.persistence.accessModes PVC Access Mode for PostgreSQL volume
+    ##
+    accessModes:
+      - ReadWriteOnce
+    ## @param primary.persistence.size PVC Storage Request for PostgreSQL volume
+    ##
+    size: 8Gi
+
+  ## @param cnpgstac.podAffinityPreset Pod affinity preset. Ignored if `affinity` is set. Allowed values: `soft` or `hard`
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity
+  ##
+  podAffinityPreset: ""
+
+  ## @param cnpgstac.podAntiAffinityPreset Pod anti-affinity preset. Ignored if `affinity` is set. Allowed values: `soft` or `hard`
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity
+  ##
+  podAntiAffinityPreset: ""
+
+  ## Node affinity preset
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
+  ##
+  nodeAffinityPreset:
+    ## @param cnpgstac.nodeAffinityPreset.type Node affinity preset type. Ignored if `affinity` is set. Allowed values: `soft` or `hard`
+    ##
+    type: ""
+    ## @param cnpgstac.nodeAffinityPreset.key Node label key to match. Ignored if `affinity` is set
+    ##
+    key: ""
+    ## @param cnpgstac.nodeAffinityPreset.values Node label values to match. Ignored if `affinity` is set
+    ## E.g.
+    ## values:
+    ##   - e2e-az1
+    ##   - e2e-az2
+    ##
+    values: []
+
+  ## @param cnpgstac.affinity Affinity for CloudNative PostGIS pods assignment
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  ## NOTE: `podAffinityPreset`, `podAntiAffinityPreset`, and `nodeAffinityPreset` will be ignored when it's set
+  ##
+  affinity: {}
+
+  ## @param cnpgstac.nodeSelector Node labels for CloudNative PostGIS pods assignment
+  ## ref: https://kubernetes.io/docs/user-guide/node-selection/
+  ##
+  nodeSelector: {}
+
+  ## @param cnpgstac.tolerations Tolerations for CloudNative PostGIS pods assignment
+  ## ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+  ##
+  tolerations: []
